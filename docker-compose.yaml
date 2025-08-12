@@ -12,15 +12,20 @@ services:
       emotion-ingestion-service:
         condition: service_healthy
     networks:
-      - empathic-network
+      - emotion-ingestion-service-network
 
   emotion-ingestion-service:
     hostname: emotion-ingestion-service
     image: empathic-credit-system/emotion-ingestion-service
     restart: on-failure
-    # env_file: ./services/emotion-ingestion-service/.env
+    environment:
+      NATS_URL: nats://nats:4222
     networks:
-      - empathic-network
+      - emotion-ingestion-service-network
+      - nats-network
+    depends_on:
+      nats:
+        condition: service_healthy
     deploy:
       replicas: 2
     healthcheck:
@@ -30,6 +35,21 @@ services:
       retries: 3
       start_period: 5s
 
+  nats:
+    image: nats:2.10.17-alpine
+    container_name: nats-server
+    command: -js
+    networks:
+      - nats-network
+    healthcheck:
+      test: ["CMD", "nats-server", "-v"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
-  empathic-network:
+  emotion-ingestion-service-network:
     driver: bridge
+
+  nats-network:
+    internal: true

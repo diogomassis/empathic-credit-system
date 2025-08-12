@@ -2,46 +2,19 @@ import os
 import json
 import uuid
 import nats
-import logging
 from nats.js.api import StreamConfig, RetentionPolicy, DiscardPolicy
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, status, Header, BackgroundTasks
 from fastapi.responses import ORJSONResponse
-from pydantic import BaseModel, Field
 from typing import Optional
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
-logger = logging.getLogger("emotion_ingestion_service")
+from logs.log import logger
+from messaging.nats import publish_to_nats
+from models.emotion import EmotionEvent
 
 STREAM_NAME = "emotions"
 NATS_SUBJECT = "user.emotions.topic"
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
-
-class EmotionMetrics(BaseModel):
-    positivity: float = Field(..., ge=0.0, le=1.0, description="Positivity score from 0.0 to 1.0.")
-    intensity: float = Field(..., ge=0.0, le=1.0, description="Intensity score from 0.0 to 1.0.")
-    stress_level: float = Field(..., ge=0.0, le=1.0, description="Stress level from 0.0 to 1.0.")
-
-class EmotionEventPayload(BaseModel):
-    type: str = Field(..., description="The type of analysis performed, e.g., 'SENTIMENT_ANALYSIS'.")
-    metrics: EmotionMetrics
-
-class EmotionEvent(BaseModel):
-    user_id: str = Field(..., alias="userId", description="The unique identifier for the user.")
-    timestamp: str = Field(..., description="The ISO 8601 timestamp of the event.")
-    emotion_event: EmotionEventPayload = Field(..., alias="emotionEvent")
-
-async def publish_to_nats(nc: nats.aio.client.Client, subject: str, payload: bytes):
-    """Publishes the message to NATS JetStream in the background."""
-    try:
-        js = nc.jetstream()
-        await js.publish(subject, payload)
-        logger.info(f"Background task: Event published to NATS topic '{subject}'")
-    except Exception as e:
-        logger.error(f"Background task error: Failed to publish to NATS. Error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

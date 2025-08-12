@@ -1,7 +1,7 @@
 name: 'empathic-credit-system'
 
 services:
-  nginx:
+  emotion-ingestion-service-nginx:
     image: nginx:1.25.4-alpine
     container_name: emotion-ingestion-service-nginx
     volumes:

@@ -35,22 +35,22 @@ class EmotionEvent(BaseModel):
     emotion_event: EmotionEventPayload = Field(..., alias="emotionEvent")
 
 async def publish_to_nats(nc: nats.aio.client.Client, subject: str, payload: bytes):
-    """Publica a mensagem no NATS JetStream em segundo plano."""
+    """Publishes the message to NATS JetStream in the background."""
     try:
         js = nc.jetstream()
         await js.publish(subject, payload)
-        logger.info(f"Background task: Evento publicado no tópico NATS '{subject}'")
+        logger.info(f"Background task: Event published to NATS topic '{subject}'")
     except Exception as e:
-        logger.error(f"Background task error: Falha ao publicar no NATS. Erro: {e}")
+        logger.error(f"Background task error: Failed to publish to NATS. Error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"Conectando ao NATS em {NATS_URL}...")
+    logger.info(f"Connecting to NATS at {NATS_URL}...")
     try:
         nc = await nats.connect(NATS_URL, name="emotion_ingestion_service")
         js = nc.jetstream()
         app.state.nats_connection = nc
-        logger.info("✅ Conectado ao NATS.")
+        logger.info("✅ Connected to NATS.")
 
         stream_config = StreamConfig(
             name=STREAM_NAME,
@@ -60,19 +60,19 @@ async def lifespan(app: FastAPI):
             discard=DiscardPolicy.OLD,
             duplicate_window=120,
         )
-        logger.info(f"Garantindo a existência do stream '{STREAM_NAME}'...")
+        logger.info(f"Ensuring stream '{STREAM_NAME}' exists...")
         try:
             await js.add_stream(stream_config)
-            logger.info(f"✅ Stream '{STREAM_NAME}' criado com sucesso.")
+            logger.info(f"✅ Stream '{STREAM_NAME}' created successfully.")
         except nats.js.errors.StreamNameAlreadyInUseError:
-            logger.info(f"ℹ️  Stream '{STREAM_NAME}' já existe, pulando criação.")
+            logger.info(f"ℹ️  Stream '{STREAM_NAME}' already exists, skipping creation.")
         
         yield
     finally:
         if hasattr(app.state, 'nats_connection') and app.state.nats_connection.is_connected:
-            logger.info("Fechando a conexão com o NATS...")
+            logger.info("Closing connection to NATS...")
             await app.state.nats_connection.close()
-            logger.info("Conexão com o NATS fechada.")
+            logger.info("Connection to NATS closed.")
 
 app = FastAPI(
     lifespan=lifespan,
@@ -93,7 +93,7 @@ async def publish_emotion_event(
     x_request_id: Optional[str] = Header(None, alias="X-Request-ID")
 ):
     trace_id = x_request_id or str(uuid.uuid4())
-    logger.info(f"Recebido evento de emoção para user_id={event.user_id}, trace_id={trace_id}")
+    logger.info(f"Received emotion event for user_id={event.user_id}, trace_id={trace_id}")
     try:
         nc = request.app.state.nats_connection
         payload_dict = event.model_dump(by_alias=True)
@@ -104,14 +104,14 @@ async def publish_emotion_event(
         
         return {"status": "event received", "traceId": trace_id}
     except AttributeError:
-        logger.error("Serviço indisponível. Não foi possível conectar ao sistema de mensageria.")
+        logger.error("Service unavailable. Could not connect to the messaging system.")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Serviço indisponível. Não foi possível conectar ao sistema de mensageria."
+            detail="Service unavailable. Could not connect to the messaging system."
         )
     except Exception as e:
-        logger.exception(f"Falha ao processar o evento: {str(e)}")
+        logger.exception(f"Failed to process event: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Falha ao processar o evento: {str(e)}"
+            detail=f"Failed to process event: {str(e)}"
         )

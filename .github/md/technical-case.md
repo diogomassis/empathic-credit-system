@@ -104,7 +104,7 @@ Your solution will be evaluated based on:
 ## Submission Guidelines
 
 - Provide your solution in a GitHub repository.
-- Include a [README.md](../README.md) with setup instructions and any assumptions you made.
+- Include a [README.md](../../README.md) with setup instructions and any assumptions you made.
 - Prepare a brief presentation (30 minutes) explaining your design choices and walking through key parts of your implementation.
 
 ## *DISCLAIMER*

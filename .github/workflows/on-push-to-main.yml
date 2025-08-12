@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    # paths:
+    #   - "services/emotion-ingestion-service/**"
 
 permissions:
   contents: read

@@ -13,27 +13,21 @@ NATS_SUBJECT = "user.emotions.topic"
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 
 class EmotionMetrics(BaseModel):
-    """Defines the quantitative metrics of an emotion."""
     positivity: float = Field(..., ge=0.0, le=1.0, description="Positivity score from 0.0 to 1.0.")
     intensity: float = Field(..., ge=0.0, le=1.0, description="Intensity score from 0.0 to 1.0.")
     stress_level: float = Field(..., ge=0.0, le=1.0, description="Stress level from 0.0 to 1.0.")
 
 class EmotionEventPayload(BaseModel):
-    """Defines the nested payload for the emotion event."""
     type: str = Field(..., description="The type of analysis performed, e.g., 'SENTIMENT_ANALYSIS'.")
     metrics: EmotionMetrics
 
 class EmotionEvent(BaseModel):
-    """Defines the main structure for an incoming emotion event."""
     user_id: str = Field(..., alias="userId", description="The unique identifier for the user.")
     timestamp: str = Field(..., description="The ISO 8601 timestamp of the event.")
     emotion_event: EmotionEventPayload = Field(..., alias="emotionEvent")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Manages the connection to NATS and ensures the Stream exists before the application starts.
-    """
     print(f"Connecting to NATS at {NATS_URL}...")
     try:
         nc = await nats.connect(NATS_URL, name="emotion_ingestion_service")
@@ -71,7 +65,6 @@ app = FastAPI(
 
 @app.get("/healthz", status_code=status.HTTP_200_OK, tags=["Monitoring"])
 async def health_check():
-    """Provides a simple health check endpoint."""
     return {"status": "ok"}
 
 @app.post("/v1/emotions/stream", status_code=status.HTTP_202_ACCEPTED, tags=["Emotions"])
@@ -80,11 +73,7 @@ async def publish_emotion_event(
     request: Request,
     x_request_id: Optional[str] = Header(None, alias="X-Request-ID")
 ):
-    """
-    Receives an emotion event, validates it, and publishes it to a NATS JetStream topic.
-    """
     trace_id = x_request_id or str(uuid.uuid4())
-
     try:
         nc = request.app.state.nats_connection
         js = nc.jetstream()

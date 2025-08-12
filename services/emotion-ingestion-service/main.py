@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, status
 
 
+NATS_TOPIC = "user.emotions.topic"
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 
 @asynccontextmanager
@@ -44,7 +45,7 @@ async def publish_message(emotion_data: dict, request: Request):
     try:
         nc = request.app.state.nats_connection
         payload = json.dumps(emotion_data).encode()
-        await nc.publish("emotions.ingested", payload)
+        await nc.publish(NATS_TOPIC, payload)
         await nc.flush()
         return {"status": "message published", "data": emotion_data}
     except AttributeError:

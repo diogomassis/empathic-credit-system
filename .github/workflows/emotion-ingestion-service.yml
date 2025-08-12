@@ -1,9 +1,11 @@
-name: 🚀 On push to main
+name: 🚀 On push to main - Emotion Ingestion Service
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "services/emotion-ingestion-service/**"
 
 permissions:
   contents: read
@@ -30,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up .env file from secrets
-        run: cp .env.example .env
+        run: cp services/emotion-ingestion-service/.env.example services/emotion-ingestion-service/.env
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -55,10 +57,10 @@ jobs:
       - name: Build and push Docker images
         uses: docker/build-push-action@v5.1.0
         with:
-          context: .
+          context: ./services/emotion-ingestion-service
           push: true
-          file: ./Dockerfile
+          file: ./services/emotion-ingestion-service/Dockerfile
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/diogomassis/empathic-credit-system:${{ steps.get_tag.outputs.tag }}
-            ghcr.io/diogomassis/empathic-credit-system:latest
+            ghcr.io/diogomassis/empathic-credit-system/emotion-ingestion-service:${{ steps.get_tag.outputs.tag }}
+            ghcr.io/diogomassis/empathic-credit-system/emotion-ingestion-service:latest

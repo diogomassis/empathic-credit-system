@@ -1,16 +1,9 @@
 import http from 'k6/http';
-import { check, sleep } from 'k6';
+import { check } from 'k6';
 import { Trend } from 'k6/metrics';
+import { uuidv4 } from "https://jslib.k6.io/k6-utils/1.4.0/index.js";
 
 const emotionEventDuration = new Trend('emotion_event_duration');
-
-function uuidv4() {
-    // https://stackoverflow.com/a/2117523/2715716
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-}
 
 export const options = {
     stages: [

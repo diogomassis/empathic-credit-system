@@ -1,11 +1,11 @@
-name: 🚀 On push to main
+name: 🚀 On push to main - Emotion Ingestion Service
 
 on:
   push:
     branches:
       - main
-    # paths:
-    #   - "services/emotion-ingestion-service/**"
+    paths:
+      - "services/emotion-ingestion-service/**"
 
 permissions:
   contents: read

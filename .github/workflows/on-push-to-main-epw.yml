@@ -24,7 +24,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-and-push-docker-image-emotion-processing-worker:
-    name: 🐳 Build and Push Docker Image - Emotion Ingestion Service
+    name: 🐳 Build and Push Docker Image
     runs-on: ubuntu-latest
     needs: tag
     steps:

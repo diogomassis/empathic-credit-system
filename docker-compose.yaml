@@ -51,45 +51,21 @@ services:
     # docker run --rm -it --network empathic-credit-system_nats-network synadia/nats-box
 
   # Emotion Processing Worker containers
-  emotion-processing-worker-nginx:
-    image: nginx:1.25.4-alpine
-    container_name: emotion-processing-worker-nginx
-    volumes:
-      - ./services/emotion-processing-worker/nginx.conf:/etc/nginx/nginx.conf:ro
-    ports:
-      - "8888:8888"
-    depends_on:
-      emotion-processing-worker:
-        condition: service_healthy
-    networks:
-      - emotion-processing-worker-network
-
   emotion-processing-worker:
-    hostname: emotion-processing-worker
     image: empathic-credit-system/emotion-processing-worker
     restart: on-failure
     environment:
       NATS_URL: nats://nats:4222
     networks:
-      - emotion-processing-worker-network
       - nats-network
     depends_on:
       nats:
         condition: service_healthy
     deploy:
       replicas: 2
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
 
 networks:
   emotion-ingestion-service-network:
-    driver: bridge
-
-  emotion-processing-worker-network:
     driver: bridge
 
   nats-network:

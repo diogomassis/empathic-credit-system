@@ -2,7 +2,6 @@ import os
 import json
 import uuid
 import nats
-from nats.js.api import StreamConfig, RetentionPolicy, DiscardPolicy
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, status, Header, BackgroundTasks
 from fastapi.responses import ORJSONResponse
@@ -12,7 +11,6 @@ from logs.log import logger
 from messaging.nats import publish_to_nats
 from models.emotion import EmotionEvent
 
-STREAM_NAME = "emotions"
 NATS_SUBJECT = "user.emotions.topic"
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 
@@ -21,25 +19,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"Connecting to NATS at {NATS_URL}...")
     try:
         nc = await nats.connect(NATS_URL, name="emotion_ingestion_service")
-        js = nc.jetstream()
         app.state.nats_connection = nc
-        logger.info("✅ Connected to NATS.")
-
-        stream_config = StreamConfig(
-            name=STREAM_NAME,
-            subjects=[NATS_SUBJECT],
-            retention=RetentionPolicy.LIMITS,
-            storage=nats.js.api.StorageType.FILE,
-            discard=DiscardPolicy.OLD,
-            duplicate_window=120,
-        )
-        logger.info(f"Ensuring stream '{STREAM_NAME}' exists...")
-        try:
-            await js.add_stream(stream_config)
-            logger.info(f"✅ Stream '{STREAM_NAME}' created successfully.")
-        except nats.js.errors.StreamNameAlreadyInUseError:
-            logger.info(f"ℹ️  Stream '{STREAM_NAME}' already exists, skipping creation.")
-        
+        logger.info("Connected to NATS.")
         yield
     finally:
         if hasattr(app.state, 'nats_connection') and app.state.nats_connection.is_connected:

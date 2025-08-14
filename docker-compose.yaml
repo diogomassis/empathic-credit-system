@@ -118,8 +118,8 @@ services:
         condition: service_healthy
   
   transaction-service:
+    hostname: transaction-service
     image: empathic-credit-system/transaction-service
-    container_name: transaction-service
     restart: on-failure
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq-server:5672/

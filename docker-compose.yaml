@@ -81,7 +81,7 @@ services:
     depends_on:
       nats:
         condition: service_healthy
-      postgres:
+      ecs-postgres:
         condition: service_healthy
     deploy:
       replicas: 2

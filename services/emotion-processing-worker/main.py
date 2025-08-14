@@ -7,16 +7,19 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_SUBJECT = "user.emotions.topic"
-STREAM_NAME = "emotions"
+DURABLE_NAME = "processor"
 
 async def main():
     logging.info(f"Connecting to NATS at {NATS_URL}...")
+    nc = None
     try:
         nc = await nats.connect(NATS_URL, name="emotion_processing_worker")
         js = nc.jetstream()
         logging.info("Connection to NATS established.")
-        sub = await js.subscribe(subject=NATS_SUBJECT, durable="processing_worker")
-
+        sub = await js.subscribe(
+            subject=NATS_SUBJECT,
+            durable=DURABLE_NAME
+        )
         logging.info(f"Waiting for messages on topic '{NATS_SUBJECT}'...")
         async for msg in sub.messages:
             try:
@@ -25,9 +28,10 @@ async def main():
             except Exception as e:
                 logging.error(f"Error processing message: {e}")
     except Exception as e:
-        logging.critical(f"Could not connect or subscribe to NATS: {e}")
+        logging.critical(f"A critical error occurred: {e}")
     finally:
-        if 'nc' in locals() and nc.is_connected:
+        if nc and nc.is_connected:
+            logging.info("Closing connection to NATS...")
             await nc.close()
 
 if __name__ == '__main__':

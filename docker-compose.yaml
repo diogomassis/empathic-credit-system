@@ -137,7 +137,7 @@ services:
       sh -c "
         until nats --server nats:4222 stream info emotions > /dev/null 2>&1; do
           echo 'Tentando criar o stream emotions...'
-          nats --server nats:4222 stream add emotions --subjects user.emotions.topic --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
+          nats --server nats:4222 stream add emotions --subjects user.emotions.topic --storage memory --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
           sleep 2
         done
 

@@ -43,16 +43,16 @@ services:
     restart: on-failure
     environment:
       NATS_URL: nats://nats:4222
-      DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
+      DATABASE_URL: "postgresql://ecsuser:ecspassword@emotion-postgres:5432/ecsdb"
     networks:
       - nats-network
-      - db-network
+      - emotion-postgres-network
     depends_on:
       nats:
         condition: service_healthy
       nats-stream-provisioner:
         condition: service_completed_successfully
-      ecs-postgres:
+      emotion-postgres:
         condition: service_healthy
     deploy:
       replicas: 1
@@ -93,6 +93,25 @@ services:
       retries: 3
       start_period: 5s
 
+  transaction-processing-worker:
+    image: empathic-credit-system/transaction-processing-worker
+    restart: on-failure
+    environment:
+      NATS_URL: nats://nats:4222
+      DATABASE_URL: "postgresql://ecsuser:ecspassword@transaction-postgres:5432/ecsdb"
+    networks:
+      - nats-network
+      - transaction-postgres-network
+    depends_on:
+      nats:
+        condition: service_healthy
+      nats-stream-provisioner:
+        condition: service_completed_successfully
+      transaction-postgres:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
   # Messaging
   nats:
     image: nats:2.10.17-alpine
@@ -118,26 +137,52 @@ services:
       sh -c "
         until nats --server nats:4222 stream info emotions > /dev/null 2>&1; do
           echo 'Tentando criar o stream emotions...'
-          nats --server nats:4222 stream add emotions --subjects 'user.emotions.topic,transactions.topic' --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
+          nats --server nats:4222 stream add emotions --subjects user.emotions.topic --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
+          sleep 2
+        done
+
+        until nats --server nats:4222 stream info transactions > /dev/null 2>&1; do
+          echo 'Tentando criar o stream transactions...'
+          nats --server nats:4222 stream add transactions --subjects transactions.topic --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
           sleep 2
         done
       "
     restart: on-failure
 
   # Databases
-  ecs-postgres:
+  emotion-postgres:
     image: postgres:16-alpine
-    container_name: ecs-postgres
+    container_name: emotion-postgres
     restart: always
     environment:
       POSTGRES_USER: ecsuser
       POSTGRES_PASSWORD: ecspassword
       POSTGRES_DB: ecsdb
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - emotion_postgres_data:/var/lib/postgresql/data
       - ./services/emotion-processing-worker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
-      - db-network
+      - emotion-postgres-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecsuser -d ecsdb"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 5s
+
+  transaction-postgres:
+    image: postgres:16-alpine
+    container_name: transaction-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ecsuser
+      POSTGRES_PASSWORD: ecspassword
+      POSTGRES_DB: ecsdb
+    volumes:
+      - transaction_postgres_data:/var/lib/postgresql/data
+      - ./services/transaction-processing-worker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - transaction-postgres-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ecsuser -d ecsdb"]
       interval: 30s
@@ -153,9 +198,12 @@ networks:
     driver: bridge
   nats-network:
     internal: true
-  db-network:
+  emotion-postgres-network:
+    internal: true
+  transaction-postgres-network:
     internal: true
 
 # Application volumes
 volumes:
-  postgres_data:
+  emotion_postgres_data:
+  transaction_postgres_data:

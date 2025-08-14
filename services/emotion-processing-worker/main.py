@@ -93,23 +93,6 @@ async def main():
         logging.info("NATS connection established.")
 
         logging.info(f"Ensuring stream '{STREAM_NAME}' exists...")
-        try:
-            await js.add_stream(
-                name=STREAM_NAME,
-                subjects=[NATS_SUBJECT],
-                config=StreamConfig(
-                    retention=RetentionPolicy.LIMITS,
-                    storage=nats.js.api.StorageType.FILE,
-                    discard=DiscardPolicy.OLD,
-                    duplicate_window=120,
-                )
-            )
-            logging.info(f"Stream '{STREAM_NAME}' created.")
-        except APIError as e:
-            if e.err_code == 10058:
-                logging.info(f"Stream '{STREAM_NAME}' already exists.")
-            else:
-                raise e
 
         async def message_handler(msg):
             asyncio.create_task(process_message(msg, db_pool))

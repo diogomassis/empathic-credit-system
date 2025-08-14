@@ -5,17 +5,15 @@ import logging
 import json
 import asyncpg
 
-from nats.js.api import StreamConfig, RetentionPolicy, DiscardPolicy, ConsumerConfig
+from nats.js.api import ConsumerConfig
 from nats.errors import MsgAlreadyAckdError
 from pydantic import BaseModel, Field
-from nats.js.errors import APIError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/ecsdb")
 DURABLE_NAME = "processor"
-STREAM_NAME = "transactions"
 NATS_SUBJECT = "transactions.topic"
 
 class TransactionCommand(BaseModel):
@@ -31,7 +29,6 @@ async def process_message(msg, db_pool):
         query = """
         INSERT INTO transactions (user_id, amount, created_at) VALUES ($1, $2, NOW());
         """
-        
         async with db_pool.acquire() as conn:
             await conn.execute(
                 query, 
@@ -44,7 +41,7 @@ async def process_message(msg, db_pool):
         logging.error(f"JSON decoding error: {e}. Message: {msg.data.decode()}")
         await msg.ack()
     except MsgAlreadyAckdError:
-        logging.warning(f"Message with userId {transaction.user_id} was already acknowledged, probably by another replica.")
+        logging.warning(f"Message has already been acknowledged, probably by another replica.")
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await msg.nak(delay=10)
@@ -56,31 +53,12 @@ async def main():
     try:
         logging.info("Connecting to PostgreSQL...")
         db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
-        logging.info("PostgreSQL connection established.")
+        logging.info("Connection to PostgreSQL established.")
 
         logging.info(f"Connecting to NATS at {NATS_URL}...")
         nc = await nats.connect(NATS_URL, name="transaction_processing_worker")
         js = nc.jetstream()
-        logging.info("NATS connection established.")
-
-        logging.info(f"Ensuring stream '{STREAM_NAME}' exists...")
-        try:
-            await js.add_stream(
-                name=STREAM_NAME,
-                subjects=[NATS_SUBJECT],
-                config=StreamConfig(
-                    retention=RetentionPolicy.LIMITS,
-                    storage=nats.js.api.StorageType.FILE,
-                    discard=DiscardPolicy.OLD,
-                    duplicate_window=120,
-                )
-            )
-            logging.info(f"Stream '{STREAM_NAME}' created.")
-        except APIError as e:
-            if e.err_code == 10058:
-                logging.info(f"Stream '{STREAM_NAME}' already exists.")
-            else:
-                raise e
+        logging.info("Connection to NATS established.")
 
         async def message_handler(msg):
             asyncio.create_task(process_message(msg, db_pool))
@@ -97,10 +75,10 @@ async def main():
         logging.info(f"Waiting for messages on topic '{NATS_SUBJECT}'...")
         await asyncio.Future()
     except Exception as e:
-        logging.critical(f"A critical error occurred, shutting down worker: {e}")
+        logging.critical(f"A critical error occurred, shutting down the worker: {e}")
     finally:
         if nc and nc.is_connected:
-            logging.info("Closing NATS connection...")
+            logging.info("Closing connection to NATS...")
             await nc.close()
         if db_pool:
             logging.info("Closing PostgreSQL connection...")
@@ -111,4 +89,3 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         logging.info("Service manually terminated.")
-

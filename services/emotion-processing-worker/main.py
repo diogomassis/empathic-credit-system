@@ -4,8 +4,10 @@ import nats
 import logging
 import json
 import asyncpg
+
 from datetime import datetime
-from nats.js.api import StreamConfig, RetentionPolicy, DiscardPolicy
+from nats.js.api import StreamConfig, RetentionPolicy, DiscardPolicy, ConsumerConfig
+from nats.errors import MsgAlreadyAckdError
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -15,7 +17,7 @@ NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/ecsdb")
 NATS_SUBJECT = "user.emotions.topic"
 STREAM_NAME = "emotions"
-DURABLE_NAME = "processor" 
+DURABLE_NAME = "processor"
 
 class EmotionMetrics(BaseModel):
     positivity: float
@@ -42,9 +44,7 @@ async def process_message(msg, db_pool):
 
         date_string = event.timestamp.split("T")[0]
         summary_date = datetime.strptime(date_string, "%Y-%m-%d").date()
-        
         metrics = event.emotion_event.metrics
-        
         query = """
         INSERT INTO emotional_events_summary (user_id, summary_date, avg_positivity_score, avg_intensity_score, avg_stress_level, event_count, updated_at)
         VALUES ($1, $2, $3, $4, $5, 1, NOW())
@@ -66,11 +66,13 @@ async def process_message(msg, db_pool):
                 metrics.intensity, 
                 metrics.stress_level
             )
-        logging.info(f"Event processed successfully for userId: {event.user_id}, traceId: {event.trace_id}")
         await msg.ack()
+        logging.info(f"Event successfully processed for userId: {event.user_id}, traceId: {event.trace_id}")
     except json.JSONDecodeError as e:
         logging.error(f"JSON decoding error: {e}. Message: {msg.data.decode()}")
         await msg.ack()
+    except MsgAlreadyAckdError:
+        logging.warning(f"Message with traceId {data.get('traceId', 'N/A')} was already acknowledged, probably by another replica.")
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await msg.nak(delay=10)
@@ -79,7 +81,6 @@ async def main():
     logging.info("Starting Emotion Processing Worker...")
     nc = None
     db_pool = None
-    
     try:
         logging.info("Connecting to PostgreSQL...")
         db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
@@ -106,12 +107,20 @@ async def main():
         except nats.js.errors.StreamNameAlreadyInUseError:
             logging.info(f"Stream '{STREAM_NAME}' already exists.")
 
-        sub = await js.subscribe(subject=NATS_SUBJECT, queue=DURABLE_NAME)
-        logging.info(f"Waiting for messages on topic '{NATS_SUBJECT}'...")
-        
-        async for msg in sub.messages:
-            await process_message(msg, db_pool)
+        async def message_handler(msg):
+            asyncio.create_task(process_message(msg, db_pool))
 
+        consumer_config = ConsumerConfig(
+            max_ack_pending=800
+        )
+        _ = await js.subscribe(
+            subject=NATS_SUBJECT, 
+            queue=DURABLE_NAME, 
+            cb=message_handler,
+            config=consumer_config
+        )
+        logging.info(f"Waiting for messages on topic '{NATS_SUBJECT}'...")
+        await asyncio.Future()
     except Exception as e:
         logging.critical(f"A critical error occurred, shutting down worker: {e}")
     finally:

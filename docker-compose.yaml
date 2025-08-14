@@ -84,7 +84,7 @@ services:
       ecs-postgres:
         condition: service_healthy
     deploy:
-      replicas: 2
+      replicas: 1
   
   ecs-postgres:
     image: postgres:16-alpine

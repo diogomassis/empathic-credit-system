@@ -62,7 +62,7 @@ services:
       sh -c "
         until nats --server nats:4222 stream info emotions > /dev/null 2>&1; do
           echo 'Tentando criar o stream emotions...'
-          nats --server nats:4222 stream add emotions --subjects 'user.emotions.topic' --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
+          nats --server nats:4222 stream add emotions --subjects 'user.emotions.topic,transactions.topic' --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
           sleep 2
         done
       "
@@ -90,8 +90,10 @@ services:
     image: postgres:16-alpine
     container_name: ecs-postgres
     restart: always
-    env_file:
-      - ./services/emotion-processing-worker/.env.db
+    environment:
+      POSTGRES_USER: ecsuser
+      POSTGRES_PASSWORD: ecspassword
+      POSTGRES_DB: ecsdb
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./services/emotion-processing-worker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -99,10 +101,11 @@ services:
       - db-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ecsuser -d ecsdb"]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 5
-  
+      start_period: 5s
+
   # Transaction Service containers
   transaction-service-nginx:
     image: nginx:1.25.4-alpine
@@ -122,13 +125,10 @@ services:
     image: empathic-credit-system/transaction-service
     restart: on-failure
     environment:
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq-server:5672/
+      NATS_URL: nats://nats:4222
     networks:
       - transaction-service-network
-      - rabbitmq-network
-    depends_on:
-      rabbitmq-server:
-        condition: service_healthy
+      - nats-network
     deploy:
       replicas: 2
     healthcheck:
@@ -137,24 +137,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 5s
-
-  rabbitmq-server:
-    image: rabbitmq:3.13-management-alpine
-    container_name: rabbitmq-server
-    restart: always
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    ports:
-      - "15672:15672"
-    networks:
-      - transaction-service-network
-      - rabbitmq-network
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 # Application networks
 networks:
@@ -165,8 +147,6 @@ networks:
   nats-network:
     internal: true
   db-network:
-    internal: true
-  rabbitmq-network:
     internal: true
 
 # Application volumes

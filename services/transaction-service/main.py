@@ -3,9 +3,9 @@ import json
 import logging
 import aio_pika
 
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from fastapi import FastAPI, HTTPException, Request, status
+from contextlib import asynccontextmanager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 

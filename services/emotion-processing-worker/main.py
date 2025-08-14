@@ -9,6 +9,7 @@ from datetime import datetime
 from nats.js.api import StreamConfig, RetentionPolicy, DiscardPolicy, ConsumerConfig
 from nats.errors import MsgAlreadyAckdError
 from pydantic import BaseModel, Field
+from nats.js.errors import APIError
 from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -104,8 +105,11 @@ async def main():
                 )
             )
             logging.info(f"Stream '{STREAM_NAME}' created.")
-        except nats.js.errors.StreamNameAlreadyInUseError:
-            logging.info(f"Stream '{STREAM_NAME}' already exists.")
+        except APIError as e:
+            if e.err_code == 10058:
+                logging.info(f"Stream '{STREAM_NAME}' already exists.")
+            else:
+                raise e
 
         async def message_handler(msg):
             asyncio.create_task(process_message(msg, db_pool))

@@ -74,7 +74,7 @@ services:
     restart: on-failure
     environment:
       NATS_URL: nats://nats:4222
-      DATABASE_URL: "postgresql://ecsuser:ecspassword@postgres:5432/ecsdb"
+      DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
     networks:
       - nats-network
       - db-network

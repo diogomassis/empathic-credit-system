@@ -23,7 +23,6 @@ async def lifespan(app: FastAPI):
         connection = await aio_pika.connect_robust(RABBITMQ_URL)
         channel = await connection.channel()
         await channel.declare_queue(TRANSACTION_QUEUE, durable=True)
-        
         app.state.rabbitmq_connection = connection
         app.state.rabbitmq_channel = channel
         logging.info("RabbitMQ connection established.")
@@ -50,7 +49,6 @@ async def create_transaction(transaction: TransactionPayload, request: Request):
     try:
         channel = request.app.state.rabbitmq_channel
         message_body = transaction.model_dump_json().encode()
-
         await channel.default_exchange.publish(
             aio_pika.Message(
                 body=message_body,
@@ -58,10 +56,8 @@ async def create_transaction(transaction: TransactionPayload, request: Request):
             ),
             routing_key=TRANSACTION_QUEUE
         )
-        
         logging.info(f"Transaction for userId: {transaction.user_id} published to queue '{TRANSACTION_QUEUE}'")
         return {"status": "transaction received"}
-
     except Exception as e:
         logging.error(f"Failed to publish transaction to RabbitMQ: {e}")
         raise HTTPException(

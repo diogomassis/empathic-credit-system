@@ -86,7 +86,7 @@ services:
     deploy:
       replicas: 2
   
-  postgres:
+  ecs-postgres:
     image: postgres:16-alpine
     container_name: ecs-postgres
     restart: always

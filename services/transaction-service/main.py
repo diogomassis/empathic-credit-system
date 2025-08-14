@@ -1,10 +1,9 @@
 import os
-import json
 import logging
 import aio_pika
 
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status, BackgroundTasks
 from contextlib import asynccontextmanager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -39,28 +38,34 @@ app = FastAPI(
     version="1.0.0"
 )
 
-@app.get("/healthz", status_code=status.HTTP_200_OK, tags=["Monitoring"])
-async def health_check():
-    return {"status": "ok"}
-
-@app.post("/v1/transactions", status_code=status.HTTP_202_ACCEPTED, tags=["Transactions"])
-async def create_transaction(transaction: TransactionPayload, request: Request):
-    logging.info(f"Received transaction for userId: {transaction.user_id}")
+async def publish_to_rabbitmq(channel: aio_pika.Channel, routing_key: str, message_body: bytes):
     try:
-        channel = request.app.state.rabbitmq_channel
-        message_body = transaction.model_dump_json().encode()
         await channel.default_exchange.publish(
             aio_pika.Message(
                 body=message_body,
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT
             ),
-            routing_key=TRANSACTION_QUEUE
+            routing_key=routing_key
         )
-        logging.info(f"Transaction for userId: {transaction.user_id} published to queue '{TRANSACTION_QUEUE}'")
+        logging.info(f"Background task: Transaction published to queue '{routing_key}'")
+    except Exception as e:
+        logging.error(f"Background task error: Failed to publish to RabbitMQ. Error: {e}")
+
+@app.get("/healthz", status_code=status.HTTP_200_OK, tags=["Monitoring"])
+async def health_check():
+    return {"status": "ok"}
+
+@app.post("/v1/transactions", status_code=status.HTTP_202_ACCEPTED, tags=["Transactions"])
+async def create_transaction(transaction: TransactionPayload, request: Request, background_tasks: BackgroundTasks):
+    logging.info(f"Received transaction for userId: {transaction.userId}")
+    try:
+        channel = request.app.state.rabbitmq_channel
+        message_body = transaction.model_dump_json().encode()
+        background_tasks.add_task(publish_to_rabbitmq, channel, TRANSACTION_QUEUE, message_body)
         return {"status": "transaction received"}
     except Exception as e:
-        logging.error(f"Failed to publish transaction to RabbitMQ: {e}")
+        logging.error(f"Failed to schedule transaction publishing: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service is temporarily unavailable."
+            detail="The service is temporarily unavailable."
         )

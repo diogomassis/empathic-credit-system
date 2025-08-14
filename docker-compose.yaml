@@ -76,17 +76,44 @@ services:
     restart: on-failure
     environment:
       NATS_URL: nats://nats:4222
+      DATABASE_URL: "postgresql://ecsuser:ecspassword@postgres:5432/ecsdb"
     networks:
       - nats-network
+      - db-network
     depends_on:
       nats:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     deploy:
       replicas: 2
+  
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecs-postgres
+    restart: always
+    env_file:
+      - ./services/emotion-processing-worker/.env.db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./services/emotion-processing-worker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - db-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecsuser -d ecsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+# Application networks
 networks:
   emotion-ingestion-service-network:
     driver: bridge
-
   nats-network:
     internal: true
+  db-network:
+    internal: true
+
+# Application volumes
+volumes:
+  postgres_data:

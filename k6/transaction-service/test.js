@@ -22,7 +22,7 @@ export default function () {
 
     const payload = JSON.stringify({
         userId: uuidv4(),
-        amount: 19.90
+        amount: +(Math.random() * (50000 - 1) + 1).toFixed(2)
     });
 
     const params = {

@@ -49,8 +49,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # To check the configuration, run in another terminal: 
-    # docker run --rm -it --network empathic-credit-system_nats-network synadia/nats-box
 
   nats-stream-provisioner:
     image: synadia/nats-box

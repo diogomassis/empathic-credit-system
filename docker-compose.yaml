@@ -20,7 +20,7 @@ services:
     image: empathic-credit-system/emotion-ingestion-service
     restart: on-failure
     environment:
-      NATS_URL: nats://nats:4222
+      NATS_URL: "nats://nats:4222"
     networks:
       - emotion-ingestion-service-network
       - nats-network
@@ -42,7 +42,7 @@ services:
     image: empathic-credit-system/emotion-processing-worker
     restart: on-failure
     environment:
-      NATS_URL: nats://nats:4222
+      NATS_URL: "nats://nats:4222"
       DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
     networks:
       - nats-network
@@ -75,7 +75,7 @@ services:
     image: empathic-credit-system/transaction-service
     restart: on-failure
     environment:
-      NATS_URL: nats://nats:4222
+      NATS_URL: "nats://nats:4222"
     networks:
       - transaction-service-network
       - nats-network
@@ -97,7 +97,7 @@ services:
     image: empathic-credit-system/transaction-processing-worker
     restart: on-failure
     environment:
-      NATS_URL: nats://nats:4222
+      NATS_URL: "nats://nats:4222"
       DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
     networks:
       - nats-network
@@ -117,6 +117,29 @@ services:
     restart: on-failure
     networks:
       - credit-analysis-service-network
+    deploy:
+      replicas: 2
+
+  user-and-credit-service:
+    hostname: user-and-credit-service
+    image: empathic-credit-system/user-and-credit-service
+    environment:
+      NATS_URL: "nats://nats:4222"
+      DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
+      CREDIT_ANALYSIS_SERVICE_URL: "http://credit-analysis-service:8000/v1/predict"
+    restart: on-failure
+    networks:
+      - nats-network
+      - ecs-postgres-network
+      - credit-analysis-service-network
+      - user-and-credit-service-network
+    depends_on:
+      nats:
+        condition: service_healthy
+      nats-stream-provisioner:
+        condition: service_completed_successfully
+      ecs-postgres:
+        condition: service_healthy
     deploy:
       replicas: 2
 
@@ -185,6 +208,8 @@ networks:
   transaction-service-network:
     driver: bridge
   credit-analysis-service-network:
+    driver: bridge
+  user-and-credit-service-network:
     driver: bridge
   nats-network:
     internal: true

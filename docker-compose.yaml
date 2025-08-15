@@ -43,16 +43,16 @@ services:
     restart: on-failure
     environment:
       NATS_URL: nats://nats:4222
-      DATABASE_URL: "postgresql://ecsuser:ecspassword@emotion-postgres:5432/ecsdb"
+      DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
     networks:
       - nats-network
-      - emotion-postgres-network
+      - ecs-postgres-network
     depends_on:
       nats:
         condition: service_healthy
       nats-stream-provisioner:
         condition: service_completed_successfully
-      emotion-postgres:
+      ecs-postgres:
         condition: service_healthy
     deploy:
       replicas: 1
@@ -98,19 +98,27 @@ services:
     restart: on-failure
     environment:
       NATS_URL: nats://nats:4222
-      DATABASE_URL: "postgresql://ecsuser:ecspassword@transaction-postgres:5432/ecsdb"
+      DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
     networks:
       - nats-network
-      - transaction-postgres-network
+      - ecs-postgres-network
     depends_on:
       nats:
         condition: service_healthy
       nats-stream-provisioner:
         condition: service_completed_successfully
-      transaction-postgres:
+      ecs-postgres:
         condition: service_healthy
     deploy:
-      replicas: 1
+      replicas: 2
+
+  credit-analysis-service:
+    image: empathic-credit-system/credit-analysis-service
+    restart: on-failure
+    networks:
+      - credit-analysis-service-network
+    deploy:
+      replicas: 2
 
   # Messaging
   nats:
@@ -150,9 +158,9 @@ services:
     restart: on-failure
 
   # Databases
-  emotion-postgres:
+  ecs-postgres:
     image: postgres:16-alpine
-    container_name: emotion-postgres
+    container_name: ecs-postgres
     restart: always
     environment:
       POSTGRES_USER: ecsuser
@@ -160,29 +168,9 @@ services:
       POSTGRES_DB: ecsdb
     volumes:
       - emotion_postgres_data:/var/lib/postgresql/data
-      - ./services/emotion-processing-worker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
-      - emotion-postgres-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ecsuser -d ecsdb"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 5s
-
-  transaction-postgres:
-    image: postgres:16-alpine
-    container_name: transaction-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: ecsuser
-      POSTGRES_PASSWORD: ecspassword
-      POSTGRES_DB: ecsdb
-    volumes:
-      - transaction_postgres_data:/var/lib/postgresql/data
-      - ./services/transaction-processing-worker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - transaction-postgres-network
+      - ecs-postgres-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ecsuser -d ecsdb"]
       interval: 30s
@@ -196,11 +184,11 @@ networks:
     driver: bridge
   transaction-service-network:
     driver: bridge
+  credit-analysis-service-network:
+    driver: bridge
   nats-network:
     internal: true
-  emotion-postgres-network:
-    internal: true
-  transaction-postgres-network:
+  ecs-postgres-network:
     internal: true
 
 # Application volumes

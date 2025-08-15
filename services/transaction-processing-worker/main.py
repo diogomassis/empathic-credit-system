@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/ecsdb")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://ecsuser:ecspassword@localhost:5432/ecsdb")
 DURABLE_NAME = "processor"
 NATS_SUBJECT = "transactions.topic"
 

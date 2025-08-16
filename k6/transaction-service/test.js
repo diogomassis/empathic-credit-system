@@ -1,9 +1,10 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Trend } from 'k6/metrics';
-import { uuidv4 } from "https://jslib.k6.io/k6-utils/1.4.0/index.js";
+import { uuidList } from '../uuid.js';
+// import { uuidv4 } from "https://jslib.k6.io/k6-utils/1.4.0/index.js";
 
-const emotionEventDuration = new Trend('emotion_event_duration');
+const transactionEventDuration = new Trend('transaction_event_duration');
 
 export const options = {
     stages: [
@@ -21,7 +22,7 @@ export default function () {
     const url = 'http://localhost:8888/v1/transactions';
 
     const payload = JSON.stringify({
-        userId: uuidv4(),
+        userId: uuidList[Math.floor(Math.random() * uuidList.length)],
         amount: +(Math.random() * (50000 - 1) + 1).toFixed(2)
     });
 
@@ -41,5 +42,5 @@ export default function () {
         'status is 202 (Accepted)': (r) => r.status === 202,
     });
 
-    emotionEventDuration.add(duration);
+    transactionEventDuration.add(duration);
 }

@@ -119,7 +119,7 @@ services:
       - credit-analysis-service-network
     deploy:
       replicas: 2
-
+      
   user-and-credit-service:
     hostname: user-and-credit-service
     image: empathic-credit-system/user-and-credit-service
@@ -190,7 +190,7 @@ services:
       POSTGRES_PASSWORD: ecspassword
       POSTGRES_DB: ecsdb
     volumes:
-      - emotion_postgres_data:/var/lib/postgresql/data
+      - ecs_postgres_data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - ecs-postgres-network
@@ -218,5 +218,4 @@ networks:
 
 # Application volumes
 volumes:
-  emotion_postgres_data:
-  transaction_postgres_data:
+  ecs_postgres_data:

@@ -80,7 +80,7 @@ async def analyze_credit(user_id: str, request: Request):
         transactional_query = """
         SELECT COUNT(*) as tx_count, AVG(amount) as avg_tx_value
         FROM transactions 
-        WHERE user_id = $1 AND transaction_date >= NOW() - INTERVAL '30 days';
+        WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '30 days';
         """
         transactional_data = await conn.fetchrow(transactional_query, user_id)
 

@@ -12,9 +12,24 @@ INTERNAL_API_KEY = "your-different-secret-for-internal-services"
 
 @pytest.mark.asyncio
 async def test_data_ingestion_flow(db_connection):
+    """
+    Tests the end-to-end data ingestion flows for both emotion and transaction events.
+
+    This integration test simulates sending:
+    1. A single emotion event to the `/v1/emotions/stream` endpoint.
+    2. A single transaction event to the `/v1/transactions` endpoint.
+
+    It verifies that both requests are accepted and then waits to confirm that the
+    asynchronous processing pipelines have successfully inserted the corresponding
+    records into the database.
+
+    Args:
+        db_connection: An asyncpg connection fixture to the test database.
+    """
+    # Part 1: Emotion Ingestion
     # Arrange
-    headers = {"Content-Type": "application/json", "X-Internal-Key": INTERNAL_API_KEY}
-    payload = {
+    emotion_headers = {"Content-Type": "application/json", "X-Internal-Key": INTERNAL_API_KEY}
+    emotion_payload = {
         "userId": USER_ID,
         "timestamp": datetime.utcnow().isoformat(),
         "emotionEvent": {
@@ -29,19 +44,55 @@ async def test_data_ingestion_flow(db_connection):
 
     # Act
     async with httpx.AsyncClient() as client:
-        response = await client.post(f"{API_GATEWAY_URL}/v1/emotions/stream", headers=headers, json=payload)
-    await asyncio.sleep(5)
-    summary = await db_connection.fetchrow(
+        emotion_response = await client.post(f"{API_GATEWAY_URL}/v1/emotions/stream", headers=emotion_headers, json=emotion_payload)
+
+    # Part 2: Transaction Ingestion
+    # Arrange
+    transaction_headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+    transaction_payload = {
+        "userId": USER_ID,
+        "amount": 123.45
+    }
+
+    # Act
+    async with httpx.AsyncClient() as client:
+        transaction_response = await client.post(f"{API_GATEWAY_URL}/v1/transactions", headers=transaction_headers, json=transaction_payload)
+
+    # Part 3: Asynchronous Verification
+    # Arrange
+    await asyncio.sleep(5)  # Wait for workers to process messages
+
+    # Act
+    emotion_summary = await db_connection.fetchrow(
         "SELECT * FROM emotional_events_summary WHERE user_id = $1", USER_ID
+    )
+    transaction_record = await db_connection.fetchrow(
+        "SELECT * FROM transactions WHERE user_id = $1", USER_ID
     )
 
     # Assert
-    assert response.status_code == 202
-    assert summary is not None
-    assert summary['event_count'] > 0
+    assert emotion_response.status_code == 202
+    assert transaction_response.status_code == 202
+    assert emotion_summary is not None
+    assert emotion_summary['event_count'] > 0
+    assert transaction_record is not None
+    assert float(transaction_record['amount']) == 123.45
 
 @pytest.mark.asyncio
 async def test_credit_analysis_flow(db_connection):
+    """
+    Validates the credit analysis endpoint for both approved and denied scenarios.
+
+    This test calls the credit analysis endpoint and confirms that it returns a
+    valid response structure regardless of the outcome.
+    - If the credit is approved, it asserts that a valid offer is returned and
+      has been correctly persisted in the 'credit_limits' table.
+    - If the credit is denied, it asserts that the response indicates no approval
+      and includes a reason for the denial.
+
+    Args:
+        db_connection: An asyncpg connection fixture to the test database.
+    """
     # Arrange
     headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
 
@@ -66,6 +117,21 @@ async def test_credit_analysis_flow(db_connection):
 
 @pytest.mark.asyncio
 async def test_credit_acceptance_flow(db_connection, nats_connection):
+    """
+    Tests the complete credit offer and acceptance lifecycle.
+
+    This test handles the two possible outcomes of a credit analysis call:
+    1.  If an offer is approved: It proceeds to test the acceptance flow by
+        calling the acceptance endpoint. It then verifies the asynchronous
+        side effects: a notification message is published on the NATS bus,
+        and the offer's status in the database is updated to 'active'.
+    2.  If an offer is denied: The test acknowledges this as a valid
+        business outcome and passes without further action.
+
+    Args:
+        db_connection: An asyncpg connection fixture to the test database.
+        nats_connection: A NATS client connection fixture to listen for events.
+    """
     # Arrange
     headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
     async with httpx.AsyncClient() as client:

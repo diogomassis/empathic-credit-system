@@ -17,10 +17,30 @@ DURABLE_NAME = "processor"
 NATS_SUBJECT = "transactions.topic"
 
 class TransactionCommand(BaseModel):
+    """
+    Represents a transaction command event received from NATS JetStream.
+
+    Attributes:
+        user_id (str): The unique identifier for the user associated with the transaction.
+        amount (float): The transaction amount.
+    """
     user_id: str = Field(..., alias="userId")
     amount: float
 
 async def process_message(msg, db_pool):
+    """
+    Processes a single transaction event message from NATS JetStream and inserts it into the database.
+
+    This function decodes the incoming message, validates its structure, and inserts a transaction record into PostgreSQL.
+    Handles duplicate acknowledgments, JSON decoding errors, and other exceptions robustly.
+
+    Args:
+        msg: The NATS JetStream message containing the transaction event.
+        db_pool: The asyncpg connection pool for PostgreSQL database operations.
+
+    Returns:
+        None
+    """
     try:
         payload_str = msg.data.decode()
         data = json.loads(payload_str)
@@ -47,6 +67,15 @@ async def process_message(msg, db_pool):
         await msg.nak(delay=10)
 
 async def main():
+    """
+    Main entry point for the Transaction Processing Worker service.
+
+    Establishes connections to PostgreSQL and NATS JetStream, subscribes to transaction event topics,
+    and processes incoming messages asynchronously. Handles graceful shutdown and error logging.
+
+    Returns:
+        None
+    """
     logging.info("Starting Transaction Processing Worker...")
     nc = None
     db_pool = None
@@ -61,6 +90,15 @@ async def main():
         logging.info("Connection to NATS established.")
 
         async def message_handler(msg):
+            """
+            Handles incoming NATS messages by scheduling their processing asynchronously.
+
+            Args:
+                msg: The NATS JetStream message to process.
+
+            Returns:
+                None
+            """
             asyncio.create_task(process_message(msg, db_pool))
 
         consumer_config = ConsumerConfig(
@@ -85,6 +123,9 @@ async def main():
             await db_pool.close()
 
 if __name__ == '__main__':
+    """
+    Script entry point. Runs the main async function and handles manual termination.
+    """
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

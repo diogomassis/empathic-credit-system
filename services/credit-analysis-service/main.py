@@ -13,10 +13,28 @@ app = FastAPI(
 
 @app.get("/healthz", status_code=status.HTTP_200_OK, tags=["Monitoring"])
 async def health_check():
+    """
+    Health check endpoint for monitoring service status.
+
+    Returns:
+        dict: A dictionary containing the status of the service.
+    """
     return {"status": "ok"}
 
 @app.post("/v1/predict", response_model=PredictionResponse, tags=["Prediction"])
 async def predict_risk(features: FeatureVector):
+    """
+    Predicts the credit risk score for a user based on provided feature vector.
+
+    This endpoint receives a set of user features, applies a risk prediction algorithm, and returns a risk score
+    between 0.0 (low risk) and 1.0 (high risk). The current implementation uses a random score for demonstration purposes.
+
+    Args:
+        features (FeatureVector): The input features for risk prediction.
+
+    Returns:
+        PredictionResponse: The predicted risk score response.
+    """
     # logging.info(f"Received prediction request with features: {features.model_dump_json()}")
     
     # base_score = random.uniform(0.05, 0.75)

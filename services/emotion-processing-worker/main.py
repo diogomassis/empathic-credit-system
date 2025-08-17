@@ -21,21 +21,58 @@ STREAM_NAME = "emotions"
 DURABLE_NAME = "processor"
 
 class EmotionMetrics(BaseModel):
+    """
+    Represents the core emotional metrics derived from user data.
+
+    Attributes:
+        positivity (float): Positivity score ranging from 0.0 (negative) to 1.0 (positive).
+        intensity (float): Intensity score representing the strength of the emotion, from 0.0 to 1.0.
+        stress_level (float): Stress level score from 0.0 (no stress) to 1.0 (high stress).
+    """
     positivity: float
     intensity: float
     stress_level: float
 
 class EmotionEventPayload(BaseModel):
+    """
+    Represents the payload of an emotion event, including the type of analysis and associated metrics.
+
+    Attributes:
+        type (str): The type of emotional analysis performed (e.g., 'SENTIMENT_ANALYSIS').
+        metrics (EmotionMetrics): The emotional metrics resulting from the analysis.
+    """
     type: str
     metrics: EmotionMetrics
 
 class EmotionEvent(BaseModel):
+    """
+    Represents a complete emotion event for a user, including metadata and analysis results.
+
+    Attributes:
+        user_id (str): The unique identifier for the user associated with the event.
+        timestamp (str): The ISO 8601 timestamp when the event occurred.
+        emotion_event (EmotionEventPayload): The payload containing analysis type and metrics.
+        trace_id (Optional[str]): Optional trace ID for distributed tracing.
+    """
     user_id: str = Field(..., alias="userId")
     timestamp: str
     emotion_event: EmotionEventPayload = Field(..., alias="emotionEvent")
     trace_id: Optional[str] = Field(None, alias="traceId")
 
 async def process_message(msg, db_pool):
+    """
+    Processes a single emotion event message from NATS JetStream and updates the database summary.
+
+    This function decodes the incoming message, validates its structure, and updates the emotional events summary table in PostgreSQL.
+    Handles duplicate acknowledgments, JSON decoding errors, and other exceptions robustly.
+
+    Args:
+        msg: The NATS JetStream message containing the emotion event.
+        db_pool: The asyncpg connection pool for PostgreSQL database operations.
+
+    Returns:
+        None
+    """
     try:
         payload_str = msg.data.decode()
         data = json.loads(payload_str)
@@ -79,6 +116,15 @@ async def process_message(msg, db_pool):
         await msg.nak(delay=10)
 
 async def main():
+    """
+    Main entry point for the Emotion Processing Worker service.
+
+    Establishes connections to PostgreSQL and NATS JetStream, subscribes to emotion event topics,
+    and processes incoming messages asynchronously. Handles graceful shutdown and error logging.
+
+    Returns:
+        None
+    """
     logging.info("Starting Emotion Processing Worker...")
     nc = None
     db_pool = None
@@ -95,6 +141,15 @@ async def main():
         logging.info(f"Ensuring stream '{STREAM_NAME}' exists...")
 
         async def message_handler(msg):
+            """
+            Handles incoming NATS messages by scheduling their processing asynchronously.
+
+            Args:
+                msg: The NATS JetStream message to process.
+
+            Returns:
+                None
+            """
             asyncio.create_task(process_message(msg, db_pool))
 
         consumer_config = ConsumerConfig(
@@ -118,7 +173,11 @@ async def main():
             logging.info("Closing PostgreSQL connection...")
             await db_pool.close()
 
+
 if __name__ == '__main__':
+    """
+    Script entry point. Runs the main async function and handles manual termination.
+    """
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

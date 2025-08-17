@@ -21,6 +21,16 @@ NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_ACCEPT_SUBJECT = "credit.offers.approved"
 
 class CreditOffer(BaseModel):
+    """
+    Represents a credit offer made to a user, including terms and expiration.
+
+    Attributes:
+        offer_id (str): Unique ID for the credit offer.
+        credit_limit (float): The approved credit limit.
+        interest_rate (float): The annual interest rate.
+        credit_type (str): Type of credit (e.g., SHORT_TERM_PERSONAL_LOAN).
+        expires_at (str): Offer expiration date in ISO 8601 format.
+    """
     offer_id: str = Field(..., description="Unique ID for the credit offer.")
     credit_limit: float = Field(..., description="The approved credit limit.")
     interest_rate: float = Field(..., description="The annual interest rate.")
@@ -28,6 +38,16 @@ class CreditOffer(BaseModel):
     expires_at: str = Field(..., description="Offer expiration date in ISO 8601 format.")
 
 class CreditAnalysisResponse(BaseModel):
+    """
+    Represents the response of a credit analysis for a user.
+
+    Attributes:
+        user_id (str): The unique identifier for the user.
+        approved (bool): Whether the credit is approved.
+        ml_risk_score (float): The machine learning risk score.
+        offer (CreditOffer | None): The credit offer details if approved.
+        reason (str | None): Reason for denial if not approved.
+    """
     user_id: str
     approved: bool
     ml_risk_score: float
@@ -35,9 +55,26 @@ class CreditAnalysisResponse(BaseModel):
     reason: str | None = None
 
 class AcceptOfferPayload(BaseModel):
+    """
+    Represents the payload for accepting a credit offer.
+
+    Attributes:
+        user_id (str): The unique identifier for the user accepting the offer.
+    """
     user_id: str = Field(..., alias="userId")
 
 class CreditOfferListItem(BaseModel):
+    """
+    Represents a single item in the paginated list of credit offers for a user.
+
+    Attributes:
+        offer_id (str): Unique ID for the credit offer.
+        status (str): Status of the offer (e.g., 'offered', 'active').
+        credit_limit (float): The approved credit limit.
+        interest_rate (float): The annual interest rate.
+        created_at (datetime): Timestamp when the offer was created.
+        expires_at (datetime): Timestamp when the offer expires.
+    """
     offer_id: str
     status: str
     credit_limit: float
@@ -46,6 +83,15 @@ class CreditOfferListItem(BaseModel):
     expires_at: datetime
 
 class PaginatedOffersResponse(BaseModel):
+    """
+    Represents a paginated response for a user's credit offers.
+
+    Attributes:
+        total (int): Total number of offers available.
+        page (int): Current page number.
+        page_size (int): Number of items per page.
+        items (List[CreditOfferListItem]): List of credit offer items for the current page.
+    """
     total: int
     page: int
     page_size: int
@@ -53,6 +99,17 @@ class PaginatedOffersResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Application lifespan context manager for managing database, HTTP client, and NATS connections.
+
+    Establishes connections to PostgreSQL, HTTPX client, and NATS JetStream when the FastAPI app starts and ensures proper cleanup on shutdown.
+
+    Args:
+        app (FastAPI): The FastAPI application instance.
+
+    Yields:
+        None
+    """
     logging.info("Initializing service connections...")
     try:
         app.state.db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
@@ -78,10 +135,32 @@ app = FastAPI(
 
 @app.get("/healthz", status_code=status.HTTP_200_OK, tags=["Monitoring"])
 async def health_check():
+    """
+    Health check endpoint for monitoring service status.
+
+    Returns:
+        dict: A dictionary containing the status of the service.
+    """
     return {"status": "ok"}
 
 @app.post("/v1/users/{user_id}/credit-analysis", response_model=CreditAnalysisResponse, tags=["Credit Analysis"])
 async def analyze_credit(user_id: str, request: Request):
+    """
+    Performs credit analysis for a user and returns the result.
+
+    This endpoint aggregates emotional and transactional data, sends a feature vector to the credit analysis service,
+    and returns the analysis result, including a credit offer if approved.
+
+    Args:
+        user_id (str): The unique identifier for the user.
+        request (Request): The FastAPI request object, used to access app state.
+
+    Returns:
+        CreditAnalysisResponse: The result of the credit analysis, including offer details if approved.
+
+    Raises:
+        HTTPException: 503 if analysis service is unavailable, 500 for invalid response.
+    """
     logging.info(f"Starting credit analysis for user_id={user_id}")
     
     async with request.app.state.db_pool.acquire() as conn:
@@ -151,6 +230,22 @@ async def analyze_credit(user_id: str, request: Request):
 
 @app.post("/v1/credit-offers/{offer_id}/accept", status_code=status.HTTP_202_ACCEPTED, tags=["Credit Analysis"])
 async def accept_credit_offer(offer_id: str, payload: AcceptOfferPayload, request: Request):
+    """
+    Accepts a credit offer for a user and publishes the acceptance event to NATS JetStream.
+
+    This endpoint validates the offer, ensures it is available and not expired, and publishes an acceptance event for further processing.
+
+    Args:
+        offer_id (str): The unique identifier for the credit offer.
+        payload (AcceptOfferPayload): The payload containing the user ID.
+        request (Request): The FastAPI request object, used to access app state.
+
+    Returns:
+        dict: Status message indicating the acceptance is being processed.
+
+    Raises:
+        HTTPException: 404 if offer is invalid or expired.
+    """
     logging.info(f"User {payload.user_id} attempting to accept offer {offer_id}")
     
     async with request.app.state.db_pool.acquire() as conn:
@@ -183,6 +278,20 @@ async def get_user_offers(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=100, description="Number of items per page")
 ):
+    """
+    Retrieves a paginated list of credit offers for a user.
+
+    This endpoint fetches credit offers from the database, supports pagination, and returns the results in a structured response.
+
+    Args:
+        user_id (str): The unique identifier for the user.
+        request (Request): The FastAPI request object, used to access app state.
+        page (int): Page number for pagination.
+        page_size (int): Number of items per page.
+
+    Returns:
+        PaginatedOffersResponse: Paginated list of credit offers for the user.
+    """
     logging.info(f"Fetching offers for user_id={user_id}, page={page}, page_size={page_size}")
     offset = (page - 1) * page_size
     async with request.app.state.db_pool.acquire() as conn:

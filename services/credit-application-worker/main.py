@@ -17,11 +17,33 @@ NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://ecsuser:ecspassword@localhost:5432/ecsdb")
 
 class CreditOfferAcceptedEvent(BaseModel):
+    """
+    Represents an event indicating that a credit offer has been accepted by a user.
+
+    Attributes:
+        offer_id (uuid.UUID): Unique identifier for the credit offer.
+        user_id (uuid.UUID): Unique identifier for the user who accepted the offer.
+        accepted_at (str): ISO 8601 timestamp of when the offer was accepted.
+    """
     offer_id: uuid.UUID = Field(..., alias="offerId")
     user_id: uuid.UUID = Field(..., alias="userId")
     accepted_at: str = Field(..., alias="acceptedAt")
 
 async def process_message(msg, db_pool, nats_conn):
+    """
+    Processes a single credit offer acceptance message from NATS JetStream.
+
+    This function validates the incoming message, updates the corresponding credit offer status in the database,
+    sends a notification to the user, and acknowledges the message. If an error occurs, the message is negatively acknowledged for retry.
+
+    Args:
+        msg: The NATS JetStream message containing the credit offer acceptance event.
+        db_pool: The asyncpg connection pool for PostgreSQL database operations.
+        nats_conn: The NATS connection object for publishing notifications.
+
+    Returns:
+        None
+    """
     event = None
     try:
         data = json.loads(msg.data.decode())
@@ -54,6 +76,15 @@ async def process_message(msg, db_pool, nats_conn):
         await msg.nak(delay=10)
 
 async def main():
+    """
+    Main entry point for the Credit Application Worker service.
+
+    Establishes connections to PostgreSQL and NATS JetStream, subscribes to credit offer approval events,
+    and processes incoming messages in an asynchronous loop. Handles graceful shutdown and error logging.
+
+    Returns:
+        None
+    """
     logging.info("Starting Credit Application Worker...")
     nc = None
     db_pool = None
@@ -83,6 +114,9 @@ async def main():
             await db_pool.close()
 
 if __name__ == "__main__":
+    """
+    Script entry point. Runs the main async function and handles manual termination.
+    """
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

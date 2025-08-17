@@ -1,5 +1,6 @@
 import uuid
 
+from pybreaker import CircuitBreakerError
 from configuration.config import logger
 from datetime import datetime, timedelta
 from messaging.messaging import publish_offer_acceptance_event
@@ -21,11 +22,23 @@ async def analyze_credit(user_id: str, request: Request):
     async with request.app.state.db_pool.acquire() as conn:
         feature_vector = await get_user_features(conn, user_id)
 
-    ml_result = await get_credit_analysis_from_ml_service(request.app.state.http_client, feature_vector)
-    if ml_result is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Credit analysis service unavailable.")
-
-    risk_score = ml_result.get("risk_score")
+    try:
+        ml_result = await get_credit_analysis_from_ml_service(request.app.state.http_client, feature_vector)
+        risk_score = ml_result.get("risk_score")
+    except CircuitBreakerError:
+        logger.error("Circuit breaker is open. Failing fast for ML service call.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Credit analysis service is temporarily overloaded. Please try again later."
+        )
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Credit analysis service is unavailable."
+        )
+    except Exception as e:
+        logger.error(f"An unexpected error occurred calling the ML service: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An internal error occurred during credit analysis.")
     if risk_score is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid response from analysis service.")
     if risk_score > 0.6:

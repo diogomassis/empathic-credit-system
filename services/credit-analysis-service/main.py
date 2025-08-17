@@ -17,11 +17,15 @@ async def health_check():
 
 @app.post("/v1/predict", response_model=PredictionResponse, tags=["Prediction"])
 async def predict_risk(features: FeatureVector):
-    logging.info(f"Received prediction request with features: {features.model_dump_json()}")
+    # logging.info(f"Received prediction request with features: {features.model_dump_json()}")
     
-    base_score = random.uniform(0.05, 0.75)
-    stress_penalty = features.stress_events_30d * 0.05
-    final_score = min(base_score + stress_penalty, 1.0)
+    # base_score = random.uniform(0.05, 0.75)
+    # stress_penalty = features.stress_events_30d * 0.05
+    # final_score = min(base_score + stress_penalty, 1.0)
 
+    # logging.info(f"Prediction complete. Calculated risk_score: {final_score}")
+    # return PredictionResponse(risk_score=final_score)
+    logging.info(f"Received prediction request with features: {features.model_dump_json()}")
+    final_score = random.uniform(0.0, 1.0)
     logging.info(f"Prediction complete. Calculated risk_score: {final_score}")
     return PredictionResponse(risk_score=final_score)

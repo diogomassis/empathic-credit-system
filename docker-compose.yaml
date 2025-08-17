@@ -162,6 +162,24 @@ services:
       retries: 3
       start_period: 5s
 
+  credit-application-worker:
+    image: empathic-credit-system/credit-application-worker
+    restart: on-failure
+    environment:
+      NATS_URL: "nats://nats:4222"
+      DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
+    networks:
+      - nats-network
+      - ecs-postgres-network
+    depends_on:
+      nats:
+        condition: service_healthy
+      nats-stream-provisioner:
+        condition: service_completed_successfully
+      ecs-postgres:
+        condition: service_healthy
+    deploy:
+      replicas: 1  
 
   # Messaging
   nats:

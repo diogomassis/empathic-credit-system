@@ -197,6 +197,12 @@ services:
           nats --server nats:4222 stream add transactions --subjects transactions.topic --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
           sleep 2
         done
+
+        until nats --server nats:4222 stream info credits > /dev/null 2>&1; do
+          echo 'Tentando criar o stream credits...'
+          nats --server nats:4222 stream add credits --subjects credit.offers.approved --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
+          sleep 2
+        done
       "
     restart: on-failure
 

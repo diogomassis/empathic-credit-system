@@ -10,7 +10,7 @@ router = APIRouter()
 @router.get("/healthz", status_code=status.HTTP_200_OK, tags=["Monitoring"])
 async def health_check():
     """
-    Endpoint de verificação de saúde para monitorar o status do serviço.
+    Health check endpoint to monitor the service status.
     """
     return {"status": "ok"}
 
@@ -21,9 +21,9 @@ async def create_transaction(
     background_tasks: BackgroundTasks
 ):
     """
-    Publica um evento de transação no NATS JetStream de forma assíncrona.
+    Publishes a transaction event to NATS JetStream asynchronously.
     """
-    logger.info(f"Recebida transação para userId={transaction.userId}")
+    logger.info(f"Received transaction for userId={transaction.userId}")
     try:
         nc = request.app.state.nats_connection
         payload_dict = transaction.model_dump(by_alias=True)
@@ -33,14 +33,14 @@ async def create_transaction(
         
         return {"status": "event received", "userId": transaction.userId}
     except AttributeError:
-        logger.error("Serviço indisponível. Não foi possível conectar ao sistema de mensageria.")
+        logger.error("Service unavailable. Could not connect to messaging system.")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Serviço indisponível. Não foi possível conectar ao sistema de mensageria."
+            detail="Service unavailable. Could not connect to messaging system."
         )
     except Exception as e:
-        logger.exception(f"Falha ao processar o evento: {str(e)}")
+        logger.exception(f"Failed to process event: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Falha ao processar o evento: {str(e)}"
+            detail=f"Failed to process event: {str(e)}"
         )

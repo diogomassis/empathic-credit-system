@@ -37,7 +37,6 @@ class AcceptOfferPayload(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manages the service's connections (DB pool, HTTP client, NATS)."""
     logging.info("Initializing service connections...")
     try:
         app.state.db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
@@ -109,35 +108,54 @@ async def analyze_credit(user_id: str, request: Request):
             user_id=user_id, approved=False, ml_risk_score=risk_score, reason="High risk score."
         )
     else:
-        credit_limit = max(1000, (1 - risk_score) * 10000)
-        interest_rate = 5.0 + (risk_score * 15)
-        
-        logging.info(f"Analysis approved for user_id={user_id} with score={risk_score}")
+        offer_id = uuid.uuid4()
+        credit_limit = round(max(1000, (1 - risk_score) * 10000), 2)
+        interest_rate = round(5.0 + (risk_score * 15), 2)
+        credit_type = "SHORT_TERM_PERSONAL_LOAN"
+        expires_at = datetime.utcnow() + timedelta(days=7)
+        async with request.app.state.db_pool.acquire() as conn:
+            insert_query = """
+            INSERT INTO credit_limits (id, user_id, status, credit_limit, interest_rate, credit_type, expires_at)
+            VALUES ($1, $2, 'offered', $3, $4, $5, $6)
+            """
+            await conn.execute(insert_query, offer_id, user_id, credit_limit, interest_rate, credit_type, expires_at)
+        logging.info(f"Offer {offer_id} saved to database for user_id={user_id}")
         return CreditAnalysisResponse(
             user_id=user_id,
             approved=True,
             ml_risk_score=risk_score,
             offer=CreditOffer(
-                offer_id=str(uuid.uuid4()),
-                credit_limit=round(credit_limit, 2),
-                interest_rate=round(interest_rate, 2),
-                credit_type="SHORT_TERM_PERSONAL_LOAN",
-                expires_at=(datetime.utcnow() + timedelta(days=7)).isoformat()
+                offer_id=str(offer_id),
+                credit_limit=credit_limit,
+                interest_rate=interest_rate,
+                credit_type=credit_type,
+                expires_at=expires_at.isoformat()
             )
         )
 
 @app.post("/v1/credit-offers/{offer_id}/accept", status_code=status.HTTP_202_ACCEPTED, tags=["Credit Analysis"])
 async def accept_credit_offer(offer_id: str, payload: AcceptOfferPayload, request: Request):
-    logging.info(f"User {payload.user_id} accepted offer {offer_id}")
+    logging.info(f"User {payload.user_id} attempting to accept offer {offer_id}")
     
+    async with request.app.state.db_pool.acquire() as conn:
+        validation_query = """
+        SELECT id, user_id, credit_limit, interest_rate, credit_type 
+        FROM credit_limits 
+        WHERE id = $1 AND user_id = $2 AND status = 'offered' AND expires_at > NOW()
+        """
+        offer_data = await conn.fetchrow(validation_query, uuid.UUID(offer_id), payload.user_id)
+    if not offer_data:
+        logging.warning(f"Invalid or expired offer acceptance attempt for offer {offer_id} by user {payload.user_id}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found, expired, or already processed.")
     nc = request.app.state.nats_conn
     event_data = {
-        "offerId": offer_id,
-        "userId": payload.user_id,
-        "acceptedAt": datetime.now().isoformat()
+        "offerId": str(offer_data['id']),
+        "userId": str(offer_data['user_id']),
+        "creditLimit": float(offer_data['credit_limit']),
+        "interestRate": offer_data['interest_rate'],
+        "creditType": offer_data['credit_type'],
+        "acceptedAt": datetime.utcnow().isoformat()
     }
-    
     await nc.publish(NATS_ACCEPT_SUBJECT, json.dumps(event_data).encode())
     logging.info(f"Acceptance event for offer {offer_id} published to NATS subject '{NATS_ACCEPT_SUBJECT}'")
-    
     return {"status": "offer acceptance is being processed"}

@@ -2,11 +2,9 @@ import asyncio
 import asyncpg
 import nats
 
-from nats.js.errors import APIError
-from nats.js.api import StreamConfig, RetentionPolicy, DiscardPolicy, ConsumerConfig
-
-from configuration.config import logger, DATABASE_URL, NATS_URL, NATS_SUBJECT, DURABLE_NAME
+from nats.js.api import ConsumerConfig
 from processing.processing import process_message
+from configuration.config import logger, DATABASE_URL, NATS_URL, NATS_SUBJECT, DURABLE_NAME
 
 async def main():
     """

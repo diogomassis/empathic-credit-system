@@ -56,11 +56,11 @@ async def analyze_credit(user_id: str, request: Request):
 
 @router.post("/v1/credit-offers/{offer_id}/accept", status_code=status.HTTP_202_ACCEPTED, tags=["Credit Analysis"])
 async def accept_credit_offer(offer_id: str, payload: AcceptOfferPayload, request: Request):
-    logger.info(f"User {payload.userId} attempting to accept offer {offer_id}")
+    logger.info(f"User {payload.user_id} attempting to accept offer {offer_id}")
     async with request.app.state.db_pool.acquire() as conn:
-        offer_data = await validate_offer_for_acceptance(conn, offer_id, payload.userId)
+        offer_data = await validate_offer_for_acceptance(conn, offer_id, payload.user_id)
     if not offer_data:
-        logger.warning(f"Attempt to accept invalid or expired offer {offer_id} by user {payload.userId}")
+        logger.warning(f"Attempt to accept invalid or expired offer {offer_id} by user {payload.user_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found, expired or already processed.")
     await publish_offer_acceptance_event(request.app.state.nats_conn, offer_data)
     return {"status": "offer acceptance is being processed"}

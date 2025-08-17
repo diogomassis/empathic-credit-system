@@ -1,43 +1,7 @@
-import os
-import json
-import uuid
-import nats
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, status, Header, BackgroundTasks
+from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
-from typing import Optional
-
-from logs.log import logger
-from messaging.nats import publish_to_nats
-from models.emotion import EmotionEvent
-
-NATS_SUBJECT = "user.emotions.topic"
-NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Application lifespan context manager for managing NATS connection.
-
-    Establishes a connection to NATS JetStream when the FastAPI app starts and ensures proper cleanup on shutdown.
-
-    Args:
-        app (FastAPI): The FastAPI application instance.
-
-    Yields:
-        None
-    """
-    logger.info(f"Connecting to NATS at {NATS_URL}...")
-    try:
-        nc = await nats.connect(NATS_URL, name="emotion_ingestion_service")
-        app.state.nats_connection = nc
-        logger.info("Connected to NATS.")
-        yield
-    finally:
-        if hasattr(app.state, 'nats_connection') and app.state.nats_connection.is_connected:
-            logger.info("Closing connection to NATS...")
-            await app.state.nats_connection.close()
-            logger.info("Connection to NATS closed.")
+from lifespan.lifespan import lifespan
+from api.api import router as api_router
 
 app = FastAPI(
     lifespan=lifespan,
@@ -46,61 +10,4 @@ app = FastAPI(
     default_response_class=ORJSONResponse 
 )
 
-@app.get("/healthz", status_code=status.HTTP_200_OK, tags=["Monitoring"])
-async def health_check():
-    """
-    Health check endpoint for monitoring service status.
-
-    Returns:
-        dict: A dictionary containing the status of the service.
-    """
-    return {"status": "ok"}
-
-@app.post("/v1/emotions/stream", status_code=status.HTTP_202_ACCEPTED, tags=["Emotions"])
-async def publish_emotion_event(
-    event: EmotionEvent,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    x_request_id: Optional[str] = Header(None, alias="X-Request-ID")
-):
-    """
-    Publishes a user emotion event to NATS JetStream asynchronously.
-
-    This endpoint receives an emotion event payload, attaches a trace ID, and schedules the event for background publishing to NATS.
-    Handles connection errors and logs all relevant actions for observability.
-
-    Args:
-        event (EmotionEvent): The emotion event payload to be published.
-        request (Request): The FastAPI request object, used to access app state.
-        background_tasks (BackgroundTasks): FastAPI background task manager for asynchronous publishing.
-        x_request_id (Optional[str]): Optional request trace ID for distributed tracing.
-
-    Returns:
-        dict: Status and trace ID of the received event.
-
-    Raises:
-        HTTPException: 503 if messaging system is unavailable, 500 for other errors.
-    """
-    trace_id = x_request_id or str(uuid.uuid4())
-    logger.info(f"Received emotion event for user_id={event.user_id}, trace_id={trace_id}")
-    try:
-        nc = request.app.state.nats_connection
-        payload_dict = event.model_dump(by_alias=True)
-        payload_dict['traceId'] = trace_id
-        payload_bytes = json.dumps(payload_dict).encode()
-
-        background_tasks.add_task(publish_to_nats, nc, NATS_SUBJECT, payload_bytes)
-        
-        return {"status": "event received", "traceId": trace_id}
-    except AttributeError:
-        logger.error("Service unavailable. Could not connect to the messaging system.")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service unavailable. Could not connect to the messaging system."
-        )
-    except Exception as e:
-        logger.exception(f"Failed to process event: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process event: {str(e)}"
-        )
+app.include_router(api_router)

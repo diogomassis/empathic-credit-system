@@ -1,42 +1,59 @@
 name: 'empathic-credit-system'
 
 services:
-  # APIs and Workers
-  emotion-ingestion-service-nginx:
-    image: nginx:1.25.4-alpine
-    container_name: emotion-ingestion-service-nginx
-    volumes:
-      - ./services/emotion-ingestion-service/nginx.conf:/etc/nginx/nginx.conf:ro
+  # API Gateway
+  api-gateway-ecs-nginx:
+    image: nginx:1.25.2-alpine
     ports:
       - "9999:9999"
-    depends_on:
-      emotion-ingestion-service:
-        condition: service_healthy
+    volumes:
+      - ./services/api-gateway-ecs/nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
-      - emotion-ingestion-service-network
+      - backend-network
+    depends_on:
+      api-gateway-ecs:
+        condition: service_healthy
 
+  api-gateway-ecs:
+    image: empathic-credit-system/api-gateway-ecs
+    hostname: api-gateway-ecs
+    restart: on-failure
+    environment:
+      API_SECRET_TOKEN: "your-super-secret-and-long-api-token"
+      INTERNAL_SERVICE_API_KEY: "your-different-secret-for-internal-services"
+      EMOTION_SERVICE_URL: "http://emotion-ingestion-service:8000"
+      TRANSACTION_SERVICE_URL: "http://transaction-service:8000"
+      USER_CREDIT_SERVICE_URL: "http://user-and-credit-service:8000"
+    networks:
+      - backend-network
+    depends_on:
+      - emotion-ingestion-service
+      - transaction-service
+      - user-and-credit-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      replicas: 2
+
+  # APIs and Workers
   emotion-ingestion-service:
-    hostname: emotion-ingestion-service
     image: empathic-credit-system/emotion-ingestion-service
     restart: on-failure
     environment:
       NATS_URL: "nats://nats:4222"
     networks:
-      - emotion-ingestion-service-network
+      - backend-network
       - nats-network
     depends_on:
-      nats:
-        condition: service_healthy
       nats-stream-provisioner:
         condition: service_completed_successfully
     deploy:
       replicas: 2
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
 
   emotion-processing-worker:
     image: empathic-credit-system/emotion-processing-worker
@@ -48,50 +65,28 @@ services:
       - nats-network
       - ecs-postgres-network
     depends_on:
-      nats:
-        condition: service_healthy
       nats-stream-provisioner:
         condition: service_completed_successfully
       ecs-postgres:
         condition: service_healthy
     deploy:
       replicas: 1
-
-  transaction-service-nginx:
-    image: nginx:1.25.4-alpine
-    container_name: transaction-service-nginx
-    volumes:
-      - ./services/transaction-service/nginx.conf:/etc/nginx/nginx.conf:ro
-    ports:
-      - "8888:8888"
-    networks:
-      - transaction-service-network
-    depends_on:
-      transaction-service:
-        condition: service_healthy
   
   transaction-service:
-    hostname: transaction-service
     image: empathic-credit-system/transaction-service
     restart: on-failure
     environment:
       NATS_URL: "nats://nats:4222"
     networks:
-      - transaction-service-network
+      - backend-network
       - nats-network
     depends_on:
-      nats:
-        condition: service_healthy
       nats-stream-provisioner:
         condition: service_completed_successfully
     deploy:
       replicas: 2
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
 
   transaction-processing-worker:
     image: empathic-credit-system/transaction-processing-worker
@@ -103,8 +98,6 @@ services:
       - nats-network
       - ecs-postgres-network
     depends_on:
-      nats:
-        condition: service_healthy
       nats-stream-provisioner:
         condition: service_completed_successfully
       ecs-postgres:
@@ -119,22 +112,8 @@ services:
       - credit-analysis-service-network
     deploy:
       replicas: 2
-      
-  user-and-credit-service-nginx:
-    image: nginx:1.25.4-alpine
-    container_name: user-and-credit-service-nginx
-    volumes:
-      - ./services/user-and-credit-service/nginx.conf:/etc/nginx/nginx.conf:ro
-    ports:
-      - "7777:7777"
-    networks:
-      - user-and-credit-service-network
-    depends_on:
-      user-and-credit-service:
-        condition: service_healthy
 
   user-and-credit-service:
-    hostname: user-and-credit-service
     image: empathic-credit-system/user-and-credit-service
     environment:
       NATS_URL: "nats://nats:4222"
@@ -144,11 +123,9 @@ services:
     networks:
       - nats-network
       - ecs-postgres-network
+      - backend-network
       - credit-analysis-service-network
-      - user-and-credit-service-network
     depends_on:
-      nats:
-        condition: service_healthy
       nats-stream-provisioner:
         condition: service_completed_successfully
       ecs-postgres:
@@ -157,10 +134,6 @@ services:
       replicas: 2
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
 
   credit-application-worker:
     image: empathic-credit-system/credit-application-worker
@@ -172,8 +145,6 @@ services:
       - nats-network
       - ecs-postgres-network
     depends_on:
-      nats:
-        condition: service_healthy
       nats-stream-provisioner:
         condition: service_completed_successfully
       ecs-postgres:
@@ -181,7 +152,7 @@ services:
     deploy:
       replicas: 1  
 
-  # Messaging
+  # Infrastructure (Messaging e Databases)
   nats:
     image: nats:2.10.17-alpine
     container_name: nats-server
@@ -190,9 +161,6 @@ services:
       - nats-network
     healthcheck:
       test: ["CMD", "nats-server", "-v"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   nats-stream-provisioner:
     image: synadia/nats-box
@@ -205,26 +173,20 @@ services:
     entrypoint: >
       sh -c "
         until nats --server nats:4222 stream info emotions > /dev/null 2>&1; do
-          echo 'Tentando criar o stream emotions...'
-          nats --server nats:4222 stream add emotions --subjects user.emotions.topic --storage memory --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
-          sleep 2
-        done
-
+          nats --server nats:4222 stream add emotions --subjects user.emotions.topic --storage memory --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1;
+          sleep 2;
+        done;
         until nats --server nats:4222 stream info transactions > /dev/null 2>&1; do
-          echo 'Tentando criar o stream transactions...'
-          nats --server nats:4222 stream add transactions --subjects transactions.topic --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
-          sleep 2
-        done
-
+          nats --server nats:4222 stream add transactions --subjects transactions.topic --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1;
+          sleep 2;
+        done;
         until nats --server nats:4222 stream info credits > /dev/null 2>&1; do
-          echo 'Tentando criar o stream credits...'
-          nats --server nats:4222 stream add credits --subjects credit.offers.approved --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1
-          sleep 2
-        done
+          nats --server nats:4222 stream add credits --subjects credit.offers.approved --storage file --retention limits --discard old --dupe-window 2m --max-msgs=-1 --max-bytes=-1 --max-age=0s --max-msg-size=-1 --replicas 1;
+          sleep 2;
+        done;
       "
     restart: on-failure
 
-  # Databases
   ecs-postgres:
     image: postgres:16-alpine
     container_name: ecs-postgres
@@ -240,26 +202,16 @@ services:
       - ecs-postgres-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ecsuser -d ecsdb"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 5s
 
-# Application networks
 networks:
-  emotion-ingestion-service-network:
-    driver: bridge
-  transaction-service-network:
+  backend-network:
     driver: bridge
   credit-analysis-service-network:
-    driver: bridge
-  user-and-credit-service-network:
     driver: bridge
   nats-network:
     internal: true
   ecs-postgres-network:
     internal: true
 
-# Application volumes
 volumes:
   ecs_postgres_data:

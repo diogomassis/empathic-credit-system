@@ -38,6 +38,7 @@ export default function () {
         headers: {
             'Content-Type': 'application/json',
             'X-Request-ID': `k6-${__VU}-${__ITER}`,
+            'X-Internal-Key': 'your-different-secret-for-internal-services'
         },
     };
 

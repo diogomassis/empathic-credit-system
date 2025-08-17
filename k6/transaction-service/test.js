@@ -19,7 +19,7 @@ export const options = {
 };
 
 export default function () {
-    const url = 'http://localhost:8888/v1/transactions';
+    const url = 'http://localhost:9999/v1/transactions';
 
     const payload = JSON.stringify({
         userId: uuidList[Math.floor(Math.random() * uuidList.length)],
@@ -30,6 +30,7 @@ export default function () {
         headers: {
             'Content-Type': 'application/json',
             'X-Request-ID': `k6-${__VU}-${__ITER}`,
+            'X-API-Key': 'your-super-secret-and-long-api-token'
         },
     };
 

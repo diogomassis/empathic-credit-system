@@ -5,10 +5,12 @@ import logging
 import nats
 import json
 import uuid
+
 from datetime import datetime, timedelta
+from typing import List
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status, Query
 from pydantic import BaseModel, Field
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -34,6 +36,20 @@ class CreditAnalysisResponse(BaseModel):
 
 class AcceptOfferPayload(BaseModel):
     user_id: str = Field(..., alias="userId")
+
+class CreditOfferListItem(BaseModel):
+    offer_id: str
+    status: str
+    credit_limit: float
+    interest_rate: float
+    created_at: datetime
+    expires_at: datetime
+
+class PaginatedOffersResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[CreditOfferListItem]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -159,3 +175,40 @@ async def accept_credit_offer(offer_id: str, payload: AcceptOfferPayload, reques
     await nc.publish(NATS_ACCEPT_SUBJECT, json.dumps(event_data).encode())
     logging.info(f"Acceptance event for offer {offer_id} published to NATS subject '{NATS_ACCEPT_SUBJECT}'")
     return {"status": "offer acceptance is being processed"}
+
+@app.get("/v1/users/{user_id}/offers", response_model=PaginatedOffersResponse, tags=["Credit Offers"])
+async def get_user_offers(
+    user_id: str,
+    request: Request,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page")
+):
+    logging.info(f"Fetching offers for user_id={user_id}, page={page}, page_size={page_size}")
+    offset = (page - 1) * page_size
+    async with request.app.state.db_pool.acquire() as conn:
+        count_query = "SELECT COUNT(*) FROM credit_limits WHERE user_id = $1;"
+        total_count = await conn.fetchval(count_query, user_id)
+        offers_query = """
+        SELECT id, status, credit_limit, interest_rate, created_at, expires_at
+        FROM credit_limits
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3;
+        """
+        records = await conn.fetch(offers_query, user_id, page_size, offset)
+    items = [
+        CreditOfferListItem(
+            offer_id=str(r['id']),
+            status=r['status'],
+            credit_limit=r['credit_limit'],
+            interest_rate=r['interest_rate'],
+            created_at=r['created_at'],
+            expires_at=r['expires_at']
+        ) for r in records
+    ]
+    return PaginatedOffersResponse(
+        total=total_count,
+        page=page,
+        page_size=page_size,
+        items=items
+    )

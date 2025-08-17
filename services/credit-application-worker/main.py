@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://ecsuser:ecspassword@localhost:5432/ecsdb")
-NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
-NATS_CONSUME_SUBJECT = "credit.offers.approved"
-NATS_NOTIFY_SUBJECT = "user.notifications"
 DURABLE_NAME = "processor"
+NATS_NOTIFY_SUBJECT = "user.notifications"
+NATS_CONSUME_SUBJECT = "credit.offers.approved"
+NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://ecsuser:ecspassword@localhost:5432/ecsdb")
 
 class CreditOfferAcceptedEvent(BaseModel):
     offer_id: uuid.UUID = Field(..., alias="offerId")

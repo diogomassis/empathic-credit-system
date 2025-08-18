@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime
 
 USER_ID = str(uuid.uuid4())
+# USER_ID = "d155096c-b1db-4cd6-9091-853a298f240f"
 API_GATEWAY_URL = "http://localhost:9999"
 API_KEY = "your-super-secret-and-long-api-token"
 INTERNAL_API_KEY = "your-different-secret-for-internal-services"

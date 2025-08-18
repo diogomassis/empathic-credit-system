@@ -1,4 +1,5 @@
 import uuid
+import json
 
 from pybreaker import CircuitBreakerError
 from configuration.config import logger
@@ -19,9 +20,23 @@ async def health_check():
 async def analyze_credit(user_id: str, request: Request):
     logger.info(f"Starting credit analysis for user_id={user_id}")
 
-    async with request.app.state.db_pool.acquire() as conn:
-        feature_vector = await get_user_features(conn, user_id)
-
+    redis_client = request.app.state.redis_client
+    cache_key = f"user_features:{user_id}"
+    feature_vector = None
+    try:
+        cached_features = await redis_client.get(cache_key)
+        if cached_features:
+            logger.info(f"Cache HIT for user_id={user_id}")
+            feature_vector = json.loads(cached_features)
+        else:
+            logger.info(f"Cache MISS for user_id={user_id}")
+            async with request.app.state.db_pool.acquire() as conn:
+                feature_vector = await get_user_features(conn, user_id)
+            await redis_client.setex(cache_key, 300, json.dumps(feature_vector))
+    except Exception as e:
+        logger.error(f"Redis error for user_id={user_id}: {e}. Falling back to database.")
+        async with request.app.state.db_pool.acquire() as conn:
+            feature_vector = await get_user_features(conn, user_id)
     try:
         ml_result = await get_credit_analysis_from_ml_service(request.app.state.http_client, feature_vector)
         risk_score = ml_result.get("risk_score")

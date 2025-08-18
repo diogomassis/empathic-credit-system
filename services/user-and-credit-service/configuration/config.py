@@ -10,3 +10,5 @@ CREDIT_ANALYSIS_SERVICE_URL = os.getenv("CREDIT_ANALYSIS_SERVICE_URL", "http://c
 
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_ACCEPT_SUBJECT = "credit.offers.approved"
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")

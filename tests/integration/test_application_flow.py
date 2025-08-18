@@ -178,3 +178,106 @@ async def test_credit_acceptance_flow(db_connection, nats_connection):
 
     else:
         pytest.fail(f"Unexpected API response: {response_json}")
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", [
+    "/v1/transactions",
+    f"/v1/users/{USER_ID}/credit-analysis"
+])
+async def test_api_calls_with_wrong_key_should_fail(endpoint):
+    """
+    Validates that API calls with an incorrect API key are rejected.
+
+    This test ensures that endpoints requiring an API key reject requests
+    when an invalid key is provided. It tests multiple endpoints to confirm
+    consistent behavior across the API.
+
+    Args:
+        endpoint: The API endpoint to test.
+
+    Scenarios:
+    - For `/v1/transactions`, a payload with a `userId` and `amount` is sent.
+    - For `/v1/users/{USER_ID}/credit-analysis`, no payload is required.
+
+    Assertions:
+    - The response status code is 401 (Unauthorized).
+    """
+    headers = {"Content-Type": "application/json", "X-API-Key": "this-is-a-wrong-key"}
+    payload = {"userId": USER_ID, "amount": 100} if "transactions" in endpoint else None
+
+    async with httpx.AsyncClient() as client:
+        if payload:
+            response = await client.post(f"{API_GATEWAY_URL}{endpoint}", headers=headers, json=payload)
+        else:
+            response = await client.post(f"{API_GATEWAY_URL}{endpoint}", headers=headers)
+
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", [
+    "/v1/transactions",
+    f"/v1/users/{USER_ID}/credit-analysis"
+])
+async def test_api_calls_without_key_should_fail(endpoint):
+    """
+    Validates that API calls missing the API key header are rejected.
+
+    This test ensures that endpoints requiring an API key reject requests
+    when the `X-API-Key` header is omitted. It tests multiple endpoints to
+    confirm consistent behavior across the API.
+
+    Args:
+        endpoint: The API endpoint to test.
+
+    Scenarios:
+    - For `/v1/transactions`, a payload with a `userId` and `amount` is sent.
+    - For `/v1/users/{USER_ID}/credit-analysis`, no payload is required.
+
+    Assertions:
+    - The response status code is 401 (Unauthorized).
+    """
+    headers = {"Content-Type": "application/json"}
+    payload = {"userId": USER_ID, "amount": 100} if "transactions" in endpoint else None
+
+    async with httpx.AsyncClient() as client:
+        if payload:
+            response = await client.post(f"{API_GATEWAY_URL}{endpoint}", headers=headers, json=payload)
+        else:
+            response = await client.post(f"{API_GATEWAY_URL}{endpoint}", headers=headers)
+
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
+async def test_internal_api_call_with_wrong_key_should_fail():
+    """
+    Validates that internal API calls with an incorrect internal key are rejected.
+
+    This test ensures that endpoints requiring an `X-Internal-Key` header reject
+    requests when an invalid key is provided. It specifically tests the
+    `/v1/emotions/stream` endpoint, which is used for internal emotion ingestion.
+
+    Scenario:
+    - A payload containing a `userId`, `timestamp`, and `emotionEvent` is sent
+      with an invalid `X-Internal-Key`.
+
+    Assertions:
+    - The response status code is 401 (Unauthorized).
+    """
+    headers = {"Content-Type": "application/json", "X-Internal-Key": "this-is-a-wrong-internal-key"}
+    emotion_payload = {
+        "userId": USER_ID,
+        "timestamp": datetime.utcnow().isoformat(),
+        "emotionEvent": {
+            "type": "TEST",
+            "metrics": {
+                "positivity": 0.5,
+                "intensity": 0.5,
+                "stress_level": 0.5,
+            },
+        },
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(f"{API_GATEWAY_URL}/v1/emotions/stream", headers=headers, json=emotion_payload)
+
+    assert response.status_code == 401

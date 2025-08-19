@@ -42,7 +42,15 @@ async def analyze_credit(user_id: str, request: Request):
         async with request.app.state.db_pool.acquire() as conn:
             feature_vector = await get_user_features(conn, user_id)
     try:
-        ml_result = await get_credit_analysis_from_ml_service(request.app.state.http_client, feature_vector)
+        ml_cache_key = f"ml_result:{user_id}"
+        cached_ml_result = await redis_client.get(ml_cache_key)
+        if cached_ml_result:
+            logger.info(f"Cache HIT for ML result for user_id={user_id}")
+            ml_result = json.loads(cached_ml_result)
+        else:
+            logger.info(f"Cache MISS for ML result for user_id={user_id}")
+            ml_result = await get_credit_analysis_from_ml_service(request.app.state.http_client, feature_vector)
+            await redis_client.setex(ml_cache_key, 300, json.dumps(ml_result))
         risk_score = ml_result.get("risk_score")
     except CircuitBreakerError:
         logger.error("Circuit breaker is open. Failing fast for ML service call.")
@@ -116,6 +124,7 @@ async def get_user_offers(
     ]
     return PaginatedOffersResponse(total=total_count, page=page, page_size=page_size, items=items)
 
+
 auth_router = APIRouter()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -136,20 +145,27 @@ async def register_user(payload: UserCreateDTO, request: Request):
             async with request.app.state.db_pool.acquire() as conn:
                 existing_user = await find_user_by_email(conn, payload.email)
             if existing_user:
-                await redis_client.setex(cache_key, 300, json.dumps({k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in dict(existing_user).items()}))
+                user_dict_for_cache = {k: str(v) if isinstance(v, (uuid.UUID, datetime)) else v for k, v in dict(existing_user).items()}
+                await redis_client.setex(cache_key, 300, json.dumps(user_dict_for_cache))
     except Exception as e:
         logger.error(f"Redis error for email={payload.email}: {e}. Falling back to database.")
         async with request.app.state.db_pool.acquire() as conn:
             existing_user = await find_user_by_email(conn, payload.email)
+            
     if existing_user:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered.")
+        
     password_hash = pwd_context.hash(payload.password)
     async with request.app.state.db_pool.acquire() as conn:
         user = await insert_user(conn, payload.email, password_hash)
+        
     try:
-        await redis_client.setex(cache_key, 300, json.dumps({k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in dict(user).items()}))
+        # CORREÇÃO: Converte UUID e datetime para string para o novo usuário
+        user_dict_for_cache = {k: str(v) if isinstance(v, (uuid.UUID, datetime)) else v for k, v in dict(user).items()}
+        await redis_client.setex(cache_key, 300, json.dumps(user_dict_for_cache))
     except Exception as e:
         logger.error(f"Error caching new user: {e}")
+        
     return UserDTO(
         id=str(user["id"]),
         email=user["email"],
@@ -173,17 +189,27 @@ async def login_user(payload: UserCreateDTO, request: Request):
             async with request.app.state.db_pool.acquire() as conn:
                 user = await find_user_by_email(conn, payload.email)
             if user:
-                await redis_client.setex(cache_key, 300, json.dumps(dict(user)))
+                user_dict_for_cache = {k: str(v) if isinstance(v, (uuid.UUID, datetime)) else v for k, v in dict(user).items()}
+                await redis_client.setex(cache_key, 300, json.dumps(user_dict_for_cache))
     except Exception as e:
         logger.error(f"Redis error for email={payload.email}: {e}. Falling back to database.")
         async with request.app.state.db_pool.acquire() as conn:
             user = await find_user_by_email(conn, payload.email)
+
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
-    if not pwd_context.verify(payload.password, user["password_hash"]):
+    
+    password_hash_to_verify = user.get("password_hash")
+    if not password_hash_to_verify:
+        async with request.app.state.db_pool.acquire() as conn:
+            db_user = await find_user_by_email(conn, payload.email)
+            password_hash_to_verify = db_user["password_hash"] if db_user else None
+
+    if not password_hash_to_verify or not pwd_context.verify(payload.password, password_hash_to_verify):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
+    
     ALGORITHM = "HS256"
-    expire = datetime.now(datetime.timezone.utc) + timedelta(hours=12)
+    expire = datetime.utcnow() + timedelta(days=12)
     to_encode = {
         "sub": str(user["id"]),
         "email": user["email"],

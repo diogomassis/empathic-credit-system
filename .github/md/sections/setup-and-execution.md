@@ -66,8 +66,8 @@ deactivate
 
 **_Currently, the test code is configured to wait 500 ms before checking the database._**
 
-![Tests Failed](../../images/tests-1.png)
-![Tests Failed](../../images/tests-2.png)
+![Tests Failed](../../images/png/tests-1.png)
+![Tests Failed](../../images/png/tests-2.png)
 
 Below you can see the complete test execution flow.
 

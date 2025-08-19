@@ -19,7 +19,7 @@ services:
     hostname: api-gateway-ecs
     restart: on-failure
     environment:
-      API_SECRET_TOKEN: "your-super-secret-and-long-api-token"
+      SECRET_KEY: "cloudwalkcompanytechnicalcasetoken"
       INTERNAL_SERVICE_API_KEY: "your-different-secret-for-internal-services"
       EMOTION_SERVICE_URL: "http://emotion-ingestion-service:8000"
       TRANSACTION_SERVICE_URL: "http://transaction-service:8000"
@@ -120,6 +120,7 @@ services:
       DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
       CREDIT_ANALYSIS_SERVICE_URL: "http://credit-analysis-service:8000/v1/predict"
       REDIS_URL: "redis://redis:6379"
+      SECRET_KEY: "cloudwalkcompanytechnicalcasetoken"
     restart: on-failure
     networks:
       - nats-network

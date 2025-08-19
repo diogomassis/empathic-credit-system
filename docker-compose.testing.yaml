@@ -15,7 +15,7 @@ services:
         condition: service_healthy
 
   api-gateway-ecs:
-    image: empathic-credit-system/api-gateway-ecs
+    image: ghcr.io/diogomassis/empathic-credit-system/api-gateway-ecs:v1.43.0
     hostname: api-gateway-ecs
     restart: on-failure
     environment:
@@ -40,7 +40,7 @@ services:
 
   # APIs and Workers
   emotion-ingestion-service:
-    image: empathic-credit-system/emotion-ingestion-service
+    image: ghcr.io/diogomassis/empathic-credit-system/emotion-ingestion-service:v1.40.0
     restart: on-failure
     environment:
       NATS_URL: "nats://nats:4222"
@@ -56,7 +56,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
 
   emotion-processing-worker:
-    image: empathic-credit-system/emotion-processing-worker
+    image: ghcr.io/diogomassis/empathic-credit-system/emotion-processing-worker:v1.36.0
     restart: on-failure
     environment:
       NATS_URL: "nats://nats:4222"
@@ -73,7 +73,7 @@ services:
       replicas: 1
   
   transaction-service:
-    image: empathic-credit-system/transaction-service
+    image: ghcr.io/diogomassis/empathic-credit-system/transaction-service:v1.40.0
     restart: on-failure
     environment:
       NATS_URL: "nats://nats:4222"
@@ -89,7 +89,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
 
   transaction-processing-worker:
-    image: empathic-credit-system/transaction-processing-worker
+    image: ghcr.io/diogomassis/empathic-credit-system/transaction-processing-worker:v1.37.0
     restart: on-failure
     environment:
       NATS_URL: "nats://nats:4222"
@@ -106,7 +106,7 @@ services:
       replicas: 1
 
   credit-analysis-service:
-    image: empathic-credit-system/credit-analysis-service
+    image: ghcr.io/diogomassis/empathic-credit-system/credit-analysis-service:v1.33.0
     restart: on-failure
     networks:
       - credit-analysis-service-network
@@ -114,7 +114,7 @@ services:
       replicas: 2
 
   user-and-credit-service:
-    image: empathic-credit-system/user-and-credit-service
+    image: ghcr.io/diogomassis/empathic-credit-system/user-and-credit-service:v1.45.0
     environment:
       NATS_URL: "nats://nats:4222"
       DATABASE_URL: "postgresql://ecsuser:ecspassword@ecs-postgres:5432/ecsdb"
@@ -141,7 +141,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
 
   credit-application-worker:
-    image: empathic-credit-system/credit-application-worker
+    image: ghcr.io/diogomassis/empathic-credit-system/credit-application-worker:v1.34.0
     restart: on-failure
     environment:
       NATS_URL: "nats://nats:4222"

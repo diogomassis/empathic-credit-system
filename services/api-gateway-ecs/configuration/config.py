@@ -4,7 +4,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("api_gateway")
 
-API_SECRET_TOKEN = os.getenv("API_SECRET_TOKEN", "your-super-secret-and-long-api-token")
+SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-and-long-api-token")
 INTERNAL_SERVICE_API_KEY = os.getenv("INTERNAL_SERVICE_API_KEY", "a-different-secret-for-internal-services")
 
 SERVICE_URLS = {

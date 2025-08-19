@@ -1,18 +1,28 @@
-from fastapi.security import APIKeyHeader
+from jose import JWTError, jwt
 from fastapi import Security, HTTPException, status
-from configuration.config import API_SECRET_TOKEN, INTERNAL_SERVICE_API_KEY
+from configuration.config import SECRET_KEY, INTERNAL_SERVICE_API_KEY
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 internal_api_key_header = APIKeyHeader(name="X-Internal-Key", auto_error=False)
 
-async def validate_api_key(api_key: str = Security(api_key_header)):
-    """Validates the API token for external clients."""
-    if not api_key or api_key != API_SECRET_TOKEN:
+bearer_scheme = HTTPBearer(auto_error=False)
+
+async def validate_api_key(credentials: HTTPAuthorizationCredentials = Security(bearer_scheme)):
+    """Validates the JWT Bearer token for external clients."""
+    if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key."
+            detail="Invalid or missing authorization header."
         )
-    return api_key
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token."
+        )
+    return payload
 
 async def validate_internal_api_key(internal_api_key: str = Security(internal_api_key_header)):
     """Validates the API token for internal communication between services."""

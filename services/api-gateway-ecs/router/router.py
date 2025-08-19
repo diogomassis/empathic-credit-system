@@ -49,6 +49,20 @@ async def forward_emotion_request(request: Request, _=Depends(validate_internal_
     """
     return await forward("emotion_service", "v1/emotions/stream", request)
 
+@router.post("/v1/auth/register")
+async def forward_register(request: Request):
+    """
+    Forwards user registration requests to the user_credit_service.
+    """
+    return await forward("user_credit_service", "v1/register", request)
+
+@router.post("/v1/auth/login")
+async def forward_login(request: Request):
+    """
+    Forwards user login requests to the user_credit_service.
+    """
+    return await forward("user_credit_service", "v1/login", request)
+
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def forward_user_request(request: Request, path: str, _=Depends(validate_api_key)):
     """

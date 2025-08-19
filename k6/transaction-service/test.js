@@ -1,8 +1,12 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Trend } from 'k6/metrics';
-import { uuidList } from '../uuid.js';
+import { SharedArray } from 'k6/data';
 // import { uuidv4 } from "https://jslib.k6.io/k6-utils/1.4.0/index.js";
+
+const sessions = new SharedArray('sessions', function () {
+  return JSON.parse(open('../sessions.json')); 
+});
 
 const transactionEventDuration = new Trend('transaction_event_duration');
 
@@ -20,9 +24,12 @@ export const options = {
 
 export default function () {
     const url = 'http://localhost:9999/v1/transactions';
-
+    const randomSession = sessions[Math.floor(Math.random() * sessions.length)];
+    if (!randomSession) {
+        return; 
+    }
     const payload = JSON.stringify({
-        userId: uuidList[Math.floor(Math.random() * uuidList.length)],
+        userId: randomSession.userId,
         amount: +(Math.random() * (50000 - 1) + 1).toFixed(2)
     });
 
@@ -30,7 +37,7 @@ export default function () {
         headers: {
             'Content-Type': 'application/json',
             'X-Request-ID': `k6-${__VU}-${__ITER}`,
-            'X-API-Key': 'your-super-secret-and-long-api-token'
+            'Authorization': `Bearer ${randomSession.token}`
         },
     };
 

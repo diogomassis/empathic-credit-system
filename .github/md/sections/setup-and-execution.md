@@ -32,6 +32,14 @@ In this mode, it is possible to access the database directly, since some SQL que
 
 First, you need to ensure that the test environment services have been started correctly (follow the steps in the section above).
 
+To avoid having to register and log in manually, two k6 load tests are available to register and log in multiple users at the same time.
+
+```bash
+chmod +x generate_sessions.sh && ./generate_sessions.sh
+```
+
+If you want to do the process manually, inside the k6 directory, after executing the above command, .json files with the necessary information will be available.
+
 After that, using the command line, access the folder named `tests` and execute the following commands in order.
 
 ```bash
@@ -53,6 +61,17 @@ deactivate
 ```
 
 ![Tests](../../images/gif/tests.gif)
+
+**_During the execution of the tests, some tests may fail, which is expected behavior because during the ingestion of emotions and transactions, the system verifies whether the data has been consumed and persisted in the database. And since the test is running locally, the processing time may vary, meaning that all tests may pass or some may fail._**
+
+**_Currently, the test code is configured to wait 500 ms before checking the database._**
+
+![Tests Failed](../../images/tests-1.png)
+![Tests Failed](../../images/tests-2.png)
+
+Below you can see the complete test execution flow.
+
+![Final Tests](../../images/gif/final-test.gif)
 
 ## Grafana k6
 

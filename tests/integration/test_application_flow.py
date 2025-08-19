@@ -12,11 +12,11 @@ def load_user_sessions():
     """Reads the sessions.json file and prepares it for parameterization."""
     sessions_file = os.path.join(os.path.dirname(__file__), '..', '..', 'k6', 'sessions.json')
     if not os.path.exists(sessions_file):
-        pytest.skip(f"Data file '{sessions_file}' not found. Skipping integration tests.")
+        pytest.skip(f"Data file '{sessions_file}' not found. Skipping integration tests.", allow_module_level=True)
     with open(sessions_file, 'r') as f:
         sessions = json.load(f)
     if not sessions:
-        pytest.skip(f"File '{sessions_file}' is empty. No users to test.")
+        pytest.skip(f"File '{sessions_file}' is empty. No users to test.", allow_module_level=True)
     return sessions
 
 USER_SESSIONS = load_user_sessions()

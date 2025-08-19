@@ -212,3 +212,6 @@ __marimo__/
 [Ss]cripts
 pyvenv.cfg
 pip-selfcheck.json
+
+# JSON files
+k6/*.json

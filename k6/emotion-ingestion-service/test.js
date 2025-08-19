@@ -1,8 +1,11 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Trend } from 'k6/metrics';
-// import { uuidv4 } from "https://jslib.k6.io/k6-utils/1.4.0/index.js";
-import { uuidList } from '../uuid.js';
+import { SharedArray } from 'k6/data';
+
+const users = new SharedArray('users', function () {
+  return JSON.parse(open('../users.json')); 
+});
 
 const emotionEventDuration = new Trend('emotion_event_duration');
 
@@ -20,9 +23,13 @@ export const options = {
 
 export default function () {
     const url = 'http://localhost:9999/v1/emotions/stream';
+    const randomUser = users[Math.floor(Math.random() * users.length)];
+    if (!randomUser) {
+        return; 
+    }
 
     const payload = JSON.stringify({
-        userId: uuidList[Math.floor(Math.random() * uuidList.length)],
+        userId: randomUser.id,
         timestamp: new Date().toISOString(),
         emotionEvent: {
             type: 'SENTIMENT_ANALYSIS',

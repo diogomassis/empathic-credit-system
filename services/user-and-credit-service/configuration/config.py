@@ -12,3 +12,4 @@ NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_ACCEPT_SUBJECT = "credit.offers.approved"
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key")

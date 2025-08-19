@@ -18,6 +18,14 @@ class CreditAnalysisResponse(BaseModel):
     offer: CreditOffer | None = None
     reason: str | None = None
 
+class User(BaseModel):
+    """Represents a user in the system."""
+    id: str | None = None
+    email: str
+    password_hash: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
 class AcceptOfferPayload(BaseModel):
     """Represents the payload to accept a credit offer."""
     user_id: str = Field(..., alias="userId")

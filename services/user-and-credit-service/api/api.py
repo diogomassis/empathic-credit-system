@@ -1,14 +1,18 @@
+import jwt
 import uuid
 import json
+import httpx
 
-from pybreaker import CircuitBreakerError
-from configuration.config import logger
 from datetime import datetime, timedelta
+from passlib.context import CryptContext
+from pybreaker import CircuitBreakerError
+from dtos.dtos import UserCreateDTO, UserDTO
+from configuration.config import logger, SECRET_KEY
 from messaging.messaging import publish_offer_acceptance_event
 from services.services import get_credit_analysis_from_ml_service
 from fastapi import APIRouter, Request, status, Query, HTTPException
 from models.models import CreditAnalysisResponse, AcceptOfferPayload, PaginatedOffersResponse, CreditOffer, CreditOfferListItem
-from database.database import fetch_paginated_offers, get_user_features, save_credit_offer, validate_offer_for_acceptance
+from database.database import fetch_paginated_offers, get_user_features, save_credit_offer, validate_offer_for_acceptance, insert_user, find_user_by_email
 
 router = APIRouter()
 
@@ -111,3 +115,79 @@ async def get_user_offers(
         ) for r in records
     ]
     return PaginatedOffersResponse(total=total_count, page=page, page_size=page_size, items=items)
+
+auth_router = APIRouter()
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+@auth_router.post("/v1/register", response_model=UserDTO, tags=["Auth"])
+async def register_user(payload: UserCreateDTO, request: Request):
+    logger.info(f"Attempting to register user: {payload.email}")
+    redis_client = request.app.state.redis_client
+    cache_key = f"user_email:{payload.email}"
+    existing_user = None
+    try:
+        cached_user = await redis_client.get(cache_key)
+        if cached_user:
+            logger.info(f"Cache HIT for email={payload.email}")
+            existing_user = json.loads(cached_user)
+        else:
+            logger.info(f"Cache MISS for email={payload.email}")
+            async with request.app.state.db_pool.acquire() as conn:
+                existing_user = await find_user_by_email(conn, payload.email)
+            if existing_user:
+                await redis_client.setex(cache_key, 300, json.dumps({k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in dict(existing_user).items()}))
+    except Exception as e:
+        logger.error(f"Redis error for email={payload.email}: {e}. Falling back to database.")
+        async with request.app.state.db_pool.acquire() as conn:
+            existing_user = await find_user_by_email(conn, payload.email)
+    if existing_user:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered.")
+    password_hash = pwd_context.hash(payload.password)
+    async with request.app.state.db_pool.acquire() as conn:
+        user = await insert_user(conn, payload.email, password_hash)
+    try:
+        await redis_client.setex(cache_key, 300, json.dumps({k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in dict(user).items()}))
+    except Exception as e:
+        logger.error(f"Error caching new user: {e}")
+    return UserDTO(
+        id=str(user["id"]),
+        email=user["email"],
+        created_at=str(user["created_at"]),
+        updated_at=str(user["updated_at"]),
+    )
+
+@auth_router.post("/v1/login", response_model=object, tags=["Auth"])
+async def login_user(payload: UserCreateDTO, request: Request):
+    logger.info(f"Attempting login for user: {payload.email}")
+    redis_client = request.app.state.redis_client
+    cache_key = f"user_email:{payload.email}"
+    user = None
+    try:
+        cached_user = await redis_client.get(cache_key)
+        if cached_user:
+            logger.info(f"Cache HIT for email={payload.email}")
+            user = json.loads(cached_user)
+        else:
+            logger.info(f"Cache MISS for email={payload.email}")
+            async with request.app.state.db_pool.acquire() as conn:
+                user = await find_user_by_email(conn, payload.email)
+            if user:
+                await redis_client.setex(cache_key, 300, json.dumps(dict(user)))
+    except Exception as e:
+        logger.error(f"Redis error for email={payload.email}: {e}. Falling back to database.")
+        async with request.app.state.db_pool.acquire() as conn:
+            user = await find_user_by_email(conn, payload.email)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
+    if not pwd_context.verify(payload.password, user["password_hash"]):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
+    ALGORITHM = "HS256"
+    expire = datetime.now(datetime.timezone.utc) + timedelta(hours=12)
+    to_encode = {
+        "sub": str(user["id"]),
+        "email": user["email"],
+        "exp": expire
+    }
+    token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return {"access_token": token, "token_type": "bearer"}

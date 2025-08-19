@@ -16,12 +16,15 @@ async def get_user_features(db_conn, user_id: str) -> dict:
     """
     transactional_data = await db_conn.fetchrow(transactional_query, user_id)
 
-    return {
+    feature_vector = {
         "transaction_count_30d": transactional_data['tx_count'] if transactional_data else 0,
         "avg_transaction_value_30d": float(transactional_data['avg_tx_value'] or 0.0),
         "avg_positivity_7d": emotional_data['avg_positivity'] if emotional_data and emotional_data['avg_positivity'] is not None else 0.5,
-        "stress_events_30d": emotional_data['stress_events'] if emotional_data else 0
+        "stress_events_30d": emotional_data['stress_events'] if emotional_data and emotional_data['stress_events'] is not None else 0
     }
+    import logging
+    logging.info(f"Feature vector for ML: {feature_vector}")
+    return feature_vector
 
 async def save_credit_offer(db_conn, offer_details: dict):
     """Saves a new credit offer to the database."""
@@ -63,3 +66,27 @@ async def fetch_paginated_offers(db_conn, user_id: str, page_size: int, offset: 
     records = await db_conn.fetch(offers_query, user_id, page_size, offset)
     
     return total_count, records
+
+async def insert_user(db_conn, email: str, password_hash: str):
+    """
+    Inserts a new user into the users table.
+    Returns the created user record.
+    """
+    query = """
+    INSERT INTO users (email, password_hash)
+    VALUES ($1, $2)
+    RETURNING id, email, created_at, updated_at;
+    """
+    return await db_conn.fetchrow(query, email, password_hash)
+
+async def find_user_by_email(db_conn, email: str):
+    """
+    Finds a user by email.
+    Returns the user record or None if not found.
+    """
+    query = """
+    SELECT id, email, password_hash, created_at, updated_at
+    FROM users
+    WHERE email = $1;
+    """
+    return await db_conn.fetchrow(query, email)

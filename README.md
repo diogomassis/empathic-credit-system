@@ -4,12 +4,9 @@ This repository contains the implementation of the Empathetic Credit System (ECS
 
 **_During documentation, GIFs showing the execution of specific commands will be made available when necessary._**
 
-## Sections
+## Project Details
 
-- For a comprehensive understanding of the endpoints, refer to the [Endpoints](./.github/md/sections/endpoints.md).
-- For a comprehensive understanding of the system architecture, refer to the [System Architecture](./.github/md/sections/system-architecture.md).
-- For a comprehensive understanding of how to run and test, refer to the [Setup and Execution](./.github/md/sections/setup-and-execution.md).
-- For a comprehensive understanding of each technology, go to the section [Technologies](./.github/md/sections/technologies.md).
+For a comprehensive understanding of the project, refer to the [Details](./.github/md/sections/details.md).
 
 ## Overview
 

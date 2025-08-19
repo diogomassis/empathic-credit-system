@@ -1,8 +1,18 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_users_email ON users(email);
+
 CREATE TABLE transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     amount NUMERIC(10, 2),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -12,7 +22,7 @@ CREATE INDEX idx_transactions_created_at ON transactions(created_at DESC);
 
 CREATE TABLE emotional_events_summary (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     summary_date DATE NOT NULL,
     avg_positivity_score REAL,
     avg_intensity_score REAL,
@@ -27,7 +37,7 @@ CREATE INDEX idx_emotional_summary_user_date ON emotional_events_summary(user_id
 
 CREATE TABLE credit_limits (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     status VARCHAR(50) NOT NULL DEFAULT 'offered',
     credit_limit NUMERIC(15, 2) NOT NULL,
     interest_rate REAL NOT NULL,

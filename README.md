@@ -4,6 +4,10 @@ This repository contains the implementation of the Empathetic Credit System (ECS
 
 **_During documentation, GIFs showing the execution of specific commands will be made available when necessary._**
 
+## Step by step
+
+To gain a deeper understanding of how the system execution process works, watch the video located in the video folder. [Watch the system execution process video](./video/README.md).
+
 ## Project Details
 
 For a comprehensive understanding of the project, refer to the [Details](./.github/md/sections/details.md).
